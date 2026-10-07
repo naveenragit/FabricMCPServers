@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "wealth-management-mcp": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/../.venv/Scripts/python.exe",
+      "args": [
+        "-m", "wealth_management_mcp", "serve",
+        "--catalog", "${workspaceFolder}/../artifacts/wealth-management-catalog.json"
+      ],
+      "env": {"WEALTH_MCP_BACKEND": "offline"}
+    }
+  }
+}

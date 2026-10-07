@@ -1,0 +1,35 @@
+name: Python MCP checks
+
+on:
+  push:
+    paths: ['semantic-model-mcp/**', '.github/workflows/ci.yml']
+  pull_request:
+    paths: ['semantic-model-mcp/**', '.github/workflows/ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    env:
+      UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.venv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+      - name: Install locked runtime and test dependencies
+        run: uv sync --project semantic-model-mcp --python 3.11 --locked --group dev
+      - name: Lint
+        run: .venv/bin/python -m ruff check semantic-model-mcp/src semantic-model-mcp/tests
+      - name: Check types
+        run: .venv/bin/python -m mypy --config-file semantic-model-mcp/pyproject.toml --follow-imports silent semantic-model-mcp/src
+      - name: Offline tests and MCP transports
+        run: .venv/bin/python -m pytest semantic-model-mcp/tests -q
+      - name: Build wheel
+        run: uv build --project semantic-model-mcp --python 3.11 --wheel --out-dir semantic-model-mcp/dist
+# No Azure credentials, PBIX uploads, live Fabric calls, or deployments in CI.
+# uv.lock resolves from public PyPI; every artifact SHA-256 matches pypi.org.

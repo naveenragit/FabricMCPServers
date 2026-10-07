@@ -1,0 +1,52 @@
+# Local source data and private metadata are not public source artifacts.
+*.pbix
+*.pbit
+*.abf
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+artifacts/
+.tools/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+bin/
+obj/
+TestResults/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.log
+
+# Credentials and deployment state; real IDs/keys must never be committed.
+*.pem
+*.key
+*.pfx
+*.p12
+*.publishsettings
+local.settings.json
+.azure/
+
+# Compiled Bicep/ARM output; build-params resolves real IDs from the environment.
+**/infra/*.json
+
+# Deployment packaging output, rebuilt by scripts/build-deployment-package.ps1.
+**/deploy/_stage/
+**/deploy/*.zip
+
+# Editor and OS files; the offline MCP launch configs are intentionally shared.
+**/.vscode/*
+!**/.vscode/mcp.json
+!**/.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

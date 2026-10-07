@@ -1,0 +1,406 @@
+# Formula-derived draft guidance; model-owner business verification still required.
+# Descriptions use extracted definitions and column/relationship metadata, not row data.
+# Canonical paths are aliases only; native names, formulas and security remain unchanged.
+version: "1.0.0"
+objects:
+  model/sm_wealth_mgmt_import:
+    description: >-
+      Import model with 15 tables and 53 native measures covering client and advisor
+      row counts, transaction amounts, AUM and holding snapshot sums, stored returns,
+      interactions, opportunities, alerts, lifecycle events and recommendations.
+    instructions: >-
+      State an explicit reporting date range or as-of date and the primary or
+      secondary advisor role before interpreting results. Describe the actual
+      filter context; do not silently substitute the latest date. AUM and holding
+      value measures sum visible snapshot rows across dates unless their definitions
+      explicitly change the date context. Both advisor dimensions actively filter
+      fact_client_interaction, fact_opportunity and fact_recommendation through
+      advisor_key; neither has an extracted relationship to dim_client's
+      advisor_key_primary or advisor_key_secondary. Do not infer advisor filtering
+      of clients, AUM or other facts from those column names. The five account_key
+      links from fact_transaction, fact_aum_daily, fact_performance_daily,
+      fact_holding_snapshot and fact_lifecycle_event to dim_account are inactive;
+      do not assume ordinary account-dimension filters propagate through them.
+      No transaction-to-dim_date relationship was extracted for trade_date_key or
+      settle_date_key; verify the intended date role and filter path before claiming
+      date-filtered transaction results, including MTD or QTD. This is a fixed private
+      POC scope, not a per-user RLS or caller-authorized metadata view. Preserve native
+      engine security; do not expose role expressions or memberships. This guidance
+      does not establish live filter behavior or data freshness. Formula-derived
+      draft guidance requires model-owner business verification.
+
+  # Tables: descriptions do not assert unverified row uniqueness or business grain.
+  datasets/dim_account:
+    description: >-
+      Account identifiers, account_type, base_currency, client_key, open_date and
+      status. Accounts per Client counts these rows. The client relationship is
+      active, but all five extracted account-to-fact relationships are inactive.
+  datasets/dim_advisor_primary:
+    description: >-
+      Primary-role advisor attributes including advisor_key, title, team, region,
+      tenure and certifications; Primary Advisor Count counts dimension rows.
+      Active advisor_key links reach interactions, opportunities and recommendations,
+      not dim_client[advisor_key_primary].
+  datasets/dim_advisor_secondary:
+    description: >-
+      Secondary-role advisor attributes including advisor_key, title, team, region,
+      tenure and certifications; Secondary Advisor Count counts dimension rows.
+      Active links use the same advisor_key columns in interactions, opportunities
+      and recommendations as the primary dimension, not dim_client[advisor_key_secondary].
+  datasets/dim_client:
+    description: >-
+      Client attributes including segment, risk_profile, onboard_date and both
+      advisor-role keys. Client measures count rows, filter segment labels or compare
+      onboard_date with the selected date bounds; the advisor-role keys have no
+      extracted advisor relationships. Active client_key links reach accounts and
+      all nine fact tables.
+  datasets/dim_date:
+    description: >-
+      date_key and full_date with calendar, fiscal and period-end attributes.
+      full_date supplies time-intelligence dates and New Clients (Period) bounds.
+      Active date_key links reach eight fact tables, but not fact_transaction.
+  datasets/dim_security:
+    description: >-
+      security_key, ticker, security_name, asset_class and sector attributes.
+      Active security_key links filter transactions, holding snapshots, lifecycle
+      events and recommendations; Holdings Count counts keys in the holding fact.
+  datasets/fact_alert:
+    description: >-
+      Alert rows with date_key, client_key, alert_type, severity and is_resolved.
+      Measures count rows, apply severity or resolution predicates, and divide
+      resolved-row count by total alert-row count.
+  datasets/fact_aum_daily:
+    description: >-
+      Dated account/client rows containing aum, net_flow and is_active. Measures
+      sum stored AUM snapshots and flows, average per-account active AUM sums,
+      or change date context; base sums do not select a latest snapshot.
+  datasets/fact_client_interaction:
+    description: >-
+      Interaction rows with date, client and advisor keys, channel, duration_minutes,
+      sentiment_score and follow_up_required. Measures count rows or distinct client
+      keys, average duration and sentiment, and calculate the follow-up-required share.
+  datasets/fact_holding_snapshot:
+    description: >-
+      Dated account/client/security rows containing quantity, market_value,
+      cost_basis, unrealized_gain_loss and weight. Measures sum stored snapshot
+      values, count distinct security keys and rank securities by summed market_value;
+      they do not automatically select the latest snapshot.
+  datasets/fact_lifecycle_event:
+    description: >-
+      Event rows with date, account, client and security keys, event_type,
+      event_amount and status. Measures count rows, count status Pending rows,
+      and sum event_amount without an intrinsic status restriction.
+  datasets/fact_opportunity:
+    description: >-
+      Opportunity rows with date, client and advisor keys, opportunity_type,
+      estimated_value, probability and stage. Open counts and Pipeline Value exclude
+      Won and Lost; Weighted Pipeline sums estimated_value times probability without
+      an explicit stage filter, and Win Rate compares Won with Won plus Lost counts.
+  datasets/fact_performance_daily:
+    description: >-
+      Dated account/client rows storing portfolio_return, benchmark_return,
+      excess_return and cumulative_return. Measures average the stored return
+      columns or take the maximum cumulative_return among latest-date ties;
+      they do not calculate compounded returns from daily returns.
+  datasets/fact_recommendation:
+    description: >-
+      Recommendation rows with date, client, advisor and security keys, action,
+      rationale and status. Measures count all rows, count Proposed rows, and divide
+      Accepted-or-Implemented row count by total recommendation-row count.
+  datasets/fact_transaction:
+    description: >-
+      Transaction rows with trade_date_key, settle_date_key, account, client and
+      security keys, txn_type, quantity, price, amount and currency. Measures count
+      rows, sum signed amount or average its absolute value. No extracted date
+      relationship connects either transaction date key to dim_date.
+
+  # Measures: native display names are retained as synonyms, not renamed bindings.
+  metrics/total_clients:
+    description: >-
+      COUNTROWS of dim_client in the current filter context; not a distinct-key
+      count and no intrinsic active-client or onboarding-period filter.
+    synonyms: ["Total Clients"]
+  metrics/new_clients_period:
+    description: >-
+      COUNTROWS of visible dim_client rows whose onboard_date is between MIN and
+      MAX of dim_date[full_date], inclusive. Uses the continuous bounds, including
+      gaps in a noncontiguous date selection, not membership in selected dates.
+    synonyms: ["New Clients (Period)"]
+  metrics/accounts_per_client:
+    description: >-
+      COUNTROWS of dim_account divided by COUNTROWS of dim_client in the current
+      context, with alternate result 0; a ratio of row counts, not distinct keys.
+    synonyms: ["Accounts per Client"]
+  metrics/uhnw_client_count:
+    description: >-
+      COUNTROWS of dim_client with segment set to Ultra High Net Worth;
+      classification uses the stored label, not a calculated wealth threshold.
+    synonyms: ["UHNW Client Count"]
+  metrics/hnw_client_count:
+    description: >-
+      COUNTROWS of dim_client with segment set to High Net Worth;
+      classification uses the stored label, not a calculated wealth threshold.
+    synonyms: ["HNW Client Count"]
+  metrics/transaction_count:
+    description: >-
+      COUNTROWS of fact_transaction in the current context, not distinct transaction_id.
+      No intrinsic transaction-type or transaction-date filter.
+    synonyms: ["Transaction Count"]
+  metrics/total_transaction_volume:
+    description: >-
+      SUM of fact_transaction[amount] in the current context, retaining stored signs;
+      not absolute volume, quantity times price, or a currency-converted amount.
+    synonyms: ["Total Transaction Volume"]
+  metrics/avg_trade_size:
+    description: >-
+      AVERAGEX of the absolute amount over visible fact_transaction rows;
+      no intrinsic Buy/Sell restriction or distinct-transaction grouping.
+    synonyms: ["Avg Trade Size"]
+  metrics/buy_volume:
+    description: >-
+      SUM of fact_transaction[amount] for Buy within currently visible txn_type
+      values, retaining stored signs rather than taking absolute amounts.
+    synonyms: ["Buy Volume"]
+  metrics/sell_volume:
+    description: >-
+      SUM of fact_transaction[amount] for Sell within currently visible txn_type
+      values, retaining stored signs rather than taking absolute amounts.
+    synonyms: ["Sell Volume"]
+  metrics/buy_sell_ratio:
+    description: >-
+      Absolute Buy Volume divided by absolute Sell Volume, with alternate result 0;
+      an amount ratio, not a transaction-count ratio.
+    synonyms: ["Buy/Sell Ratio"]
+  metrics/total_active_aum:
+    description: >-
+      SUM of fact_aum_daily[aum] with is_active set to TRUE. Sums qualifying
+      snapshot rows across visible dates, not automatically the latest or closing AUM.
+    synonyms: ["Total Active AUM"]
+  metrics/net_flows:
+    description: >-
+      SUM of fact_aum_daily[net_flow] in the current context, retaining stored signs;
+      no intrinsic is_active filter or calculation from changes in AUM.
+    synonyms: ["Net Flows"]
+  metrics/aum_growth_pct:
+    description: >-
+      Net Flows divided by (Total Active AUM minus Net Flows), with alternate result 0.
+      Uses the current-context snapshot sum and flow sum; not an observed
+      end-versus-start AUM change or an investment-return calculation.
+    synonyms: ["AUM Growth %"]
+  metrics/avg_aum_per_account:
+    description: >-
+      AVERAGEX over visible fact_aum_daily account_key values of each account's
+      SUM(aum) with is_active set to TRUE. Averages per-account snapshot sums
+      across the date context, not latest balances or individual daily rows.
+    synonyms: ["Avg AUM per Account"]
+  metrics/aum_ytd:
+    description: >-
+      TOTALYTD of Total Active AUM using dim_date[full_date]. Sums active AUM
+      snapshot rows in calendar year-to-date context, not year-end or latest AUM.
+    synonyms: ["AUM YTD"]
+  metrics/aum_previous_year:
+    description: >-
+      SUM of fact_aum_daily[aum] at the maximum dim_date[full_date] produced by
+      SAMEPERIODLASTYEAR for the current date context. Removes the is_active
+      filter; unlike Total Active AUM, it is not restricted to active rows.
+    synonyms: ["AUM Previous Year"]
+  metrics/aum_yoy_growth_pct:
+    description: >-
+      Total Active AUM minus AUM Previous Year, divided by AUM Previous Year,
+      with alternate result 0. Compares the current active snapshot sum with
+      the prior-year selected-date sum that removes the is_active filter.
+    synonyms: ["AUM YoY Growth %"]
+  metrics/transaction_volume_mtd:
+    description: >-
+      TOTALMTD of Total Transaction Volume using dim_date[full_date]. The extracted
+      model has no transaction-date relationship, so this date-context operation
+      does not establish that transaction rows are filtered to month-to-date.
+    synonyms: ["Transaction Volume MTD"]
+    instructions: >-
+      Verify the trade-date or settlement-date filter path before interpreting
+      this measure as month-to-date transaction volume.
+  metrics/transaction_volume_qtd:
+    description: >-
+      TOTALQTD of Total Transaction Volume using dim_date[full_date]. The extracted
+      model has no transaction-date relationship, so this date-context operation
+      does not establish that transaction rows are filtered to quarter-to-date.
+    synonyms: ["Transaction Volume QTD"]
+    instructions: >-
+      Verify the trade-date or settlement-date filter path before interpreting
+      this measure as quarter-to-date transaction volume.
+  metrics/interactions_ytd:
+    description: >-
+      TOTALYTD of Interaction Count using dim_date[full_date]; counts interaction
+      rows in calendar year-to-date context, not distinct clients or advisors.
+    synonyms: ["Interactions YTD"]
+  metrics/total_aum:
+    description: >-
+      SUM of fact_aum_daily[aum] across visible snapshot rows and dates, with no
+      intrinsic is_active filter and no automatic latest-date selection.
+    synonyms: ["Total AUM"]
+  metrics/avg_portfolio_return:
+    description: >-
+      Arithmetic AVERAGE of fact_performance_daily[portfolio_return] over visible
+      nonblank rows; not compounded, annualized or weighted by AUM.
+    synonyms: ["Avg Portfolio Return"]
+  metrics/avg_benchmark_return:
+    description: >-
+      Arithmetic AVERAGE of fact_performance_daily[benchmark_return] over visible
+      nonblank rows; not compounded, annualized or weighted by AUM.
+    synonyms: ["Avg Benchmark Return"]
+  metrics/avg_excess_return:
+    description: >-
+      Arithmetic AVERAGE of stored fact_performance_daily[excess_return] over
+      visible nonblank rows; not compounded or recomputed by subtracting the
+      two average-return measures.
+    synonyms: ["Avg Excess Return"]
+  metrics/latest_cumulative_return:
+    description: >-
+      TOPN(1) selects visible fact_performance_daily rows by date_key descending,
+      retaining all ties at the latest key; MAXX returns their maximum stored
+      cumulative_return. Not a sum, average, recomputed compound return or
+      separate latest-row selection for each account.
+    synonyms: ["Latest Cumulative Return"]
+  metrics/total_market_value:
+    description: >-
+      SUM of fact_holding_snapshot[market_value] across visible snapshot rows
+      and dates; no automatic latest-date selection or currency conversion.
+    synonyms: ["Total Market Value"]
+  metrics/total_cost_basis:
+    description: >-
+      SUM of fact_holding_snapshot[cost_basis] across visible snapshot rows
+      and dates; not recomputed from transactions or restricted to the latest date.
+    synonyms: ["Total Cost Basis"]
+  metrics/unrealized_gain_loss:
+    description: >-
+      SUM of stored fact_holding_snapshot[unrealized_gain_loss] across visible
+      snapshot rows and dates; not recomputed as market_value minus cost_basis
+      and not automatically restricted to the latest date.
+    synonyms: ["Unrealized Gain/Loss"]
+  metrics/unrealized_gain_pct:
+    description: >-
+      Unrealized Gain/Loss divided by Total Cost Basis, with alternate result 0.
+      Ratio of snapshot sums in the current date context, not an average of
+      row-level percentages or automatically a latest-snapshot percentage.
+    synonyms: ["Unrealized Gain %"]
+  metrics/holdings_count:
+    description: >-
+      DISTINCTCOUNT of visible fact_holding_snapshot[security_key], including
+      BLANK if present; not holding-row or account count and no latest-date selection.
+    synonyms: ["Holdings Count"]
+  metrics/top_10_concentration_pct:
+    description: >-
+      Groups visible holding snapshots by security_key, sums market_value for each,
+      and divides the sum selected by descending TOPN(10) by Total Market Value,
+      with alternate result 0. Cutoff ties can include more than ten securities;
+      ranking uses snapshot sums across the date context, not latest snapshots.
+    synonyms: ["Top 10 Concentration %"]
+  metrics/interaction_count:
+    description: >-
+      COUNTROWS of fact_client_interaction in the current context, not distinct
+      interaction_id; no intrinsic channel or meeting-only filter.
+    synonyms: ["Interaction Count"]
+  metrics/avg_sentiment_score:
+    description: >-
+      Arithmetic AVERAGE of visible fact_client_interaction[sentiment_score]
+      values, excluding blanks; no duration weighting or defined score scale.
+    synonyms: ["Avg Sentiment Score"]
+  metrics/follow_up_rate:
+    description: >-
+      Interaction-row count with follow_up_required equal to 1 within currently
+      visible flag values, divided by all visible interaction rows. DIVIDE has
+      no explicit alternate result, so a zero or blank denominator yields BLANK.
+    synonyms: ["Follow-Up Rate"]
+  metrics/avg_meeting_duration:
+    description: >-
+      Arithmetic AVERAGE of visible fact_client_interaction[duration_minutes],
+      excluding blanks. Despite the name, no meeting-only channel filter is applied.
+    synonyms: ["Avg Meeting Duration"]
+  metrics/unique_clients_contacted:
+    description: >-
+      DISTINCTCOUNT of visible fact_client_interaction[client_key], including
+      BLANK if present; not interaction count and no intrinsic contact-channel filter.
+    synonyms: ["Unique Clients Contacted"]
+  metrics/open_opportunities:
+    description: >-
+      COUNTROWS of fact_opportunity for currently visible stage values other
+      than Won and Lost; not a distinct opportunity_id count or an explicit Open label.
+    synonyms: ["Open Opportunities"]
+  metrics/pipeline_value:
+    description: >-
+      SUM of fact_opportunity[estimated_value] for currently visible stage values
+      other than Won and Lost; no probability weighting.
+    synonyms: ["Pipeline Value"]
+  metrics/weighted_pipeline:
+    description: >-
+      SUMX of estimated_value multiplied by the stored probability for each visible
+      fact_opportunity row. No explicit stage filter or probability rescaling;
+      Won and Lost are not intrinsically excluded as they are in Pipeline Value.
+    synonyms: ["Weighted Pipeline"]
+  metrics/win_rate:
+    description: >-
+      Opportunity-row count for Won divided by Won plus Lost row counts,
+      each intersecting currently visible stage values, with alternate result 0.
+      Other stage values are excluded from the denominator.
+    synonyms: ["Win Rate"]
+  metrics/total_alerts:
+    description: >-
+      COUNTROWS of fact_alert in the current context, not distinct alert_id;
+      no intrinsic severity or resolution filter.
+    synonyms: ["Total Alerts"]
+  metrics/open_alerts:
+    description: >-
+      COUNTROWS of fact_alert with the is_resolved = 0 predicate;
+      no intrinsic severity filter or age threshold.
+    synonyms: ["Open Alerts"]
+  metrics/critical_alerts:
+    description: >-
+      COUNTROWS of fact_alert with severity set to Critical;
+      no intrinsic unresolved-only filter.
+    synonyms: ["Critical Alerts"]
+  metrics/alert_resolution_rate:
+    description: >-
+      Alert-row count with is_resolved set to 1 divided by Total Alerts in the
+      original context, with alternate result 0; not a time-to-resolution measure.
+    synonyms: ["Alert Resolution Rate"]
+  metrics/total_lifecycle_events:
+    description: >-
+      COUNTROWS of fact_lifecycle_event in the current context, not distinct
+      event_id; no intrinsic event_type or status filter.
+    synonyms: ["Total Lifecycle Events"]
+  metrics/pending_events:
+    description: >-
+      COUNTROWS of fact_lifecycle_event with status set to Pending;
+      no intrinsic event_type filter or overdue-date test.
+    synonyms: ["Pending Events"]
+  metrics/total_event_amount:
+    description: >-
+      SUM of fact_lifecycle_event[event_amount] in the current context, retaining
+      stored signs; no intrinsic Pending or other status filter.
+    synonyms: ["Total Event Amount"]
+  metrics/total_recommendations:
+    description: >-
+      COUNTROWS of fact_recommendation in the current context, not distinct
+      recommendation_id; no intrinsic action or status filter.
+    synonyms: ["Total Recommendations"]
+  metrics/pending_recommendations:
+    description: >-
+      COUNTROWS of fact_recommendation with status set to Proposed;
+      the definition does not test a status label of Pending.
+    synonyms: ["Pending Recommendations"]
+  metrics/accepted_rate:
+    description: >-
+      Recommendation-row count for Accepted or Implemented within currently
+      visible status values, divided by Total Recommendations, with alternate
+      result 0. Includes both statuses, not Accepted alone.
+    synonyms: ["Accepted Rate"]
+  metrics/primary_advisor_count:
+    description: >-
+      COUNTROWS of dim_advisor_primary in the current context, not distinct
+      advisor_key or a count restricted to advisors with assigned clients.
+    synonyms: ["Primary Advisor Count"]
+  metrics/secondary_advisor_count:
+    description: >-
+      COUNTROWS of dim_advisor_secondary in the current context, not distinct
+      advisor_key or a count restricted to advisors with assigned clients.
+    synonyms: ["Secondary Advisor Count"]

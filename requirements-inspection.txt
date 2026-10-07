@@ -1,0 +1,3 @@
+# Offline, read-only PBIX inspection; not dependencies of the proposed MCP server.
+# Python 3.11 x64 is required here because native parser wheels lack Windows ARM64.
+pbixray==0.15.5
