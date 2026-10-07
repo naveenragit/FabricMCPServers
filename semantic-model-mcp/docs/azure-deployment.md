@@ -285,7 +285,7 @@ exposes **project-owned** tools rather than impersonating Microsoft identifiers:
 | Tool | Role (per Microsoft docs) |
 | --- | --- |
 | `execute_dax_query` | Execute Query |
-| `get_semantic_model_schema` | Get Semantic Model Schema (returns the OSSIE-derived profile) |
+| `get_semantic_model_schema` | Get Semantic Model Schema: compact view by default (~9K tokens: tables, columns, measures with exact DAX names, relationships); `detail="full"` returns the complete OSSIE-derived profile (~80K tokens) |
 | `get_report_metadata` | Get Report Metadata (re-verifies report-to-model binding) |
 
 Guards retained in REST mode: model/report allowlisting, `EVALUATE`-only queries, row and

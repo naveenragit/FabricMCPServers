@@ -35,7 +35,7 @@ from .backend import BackendError, RemoteBackend
 from .contracts import ContractManifest, argument_value, load_manifest, local_validator
 from .diagnostics import identity_report, network_report
 from .http_limits import ResponseLimitMiddleware
-from .profile import PROFILE_ID, canonical_json_bytes, load_profile_schema, validate_catalog
+from .profile import PROFILE_ID, canonical_json_bytes, compact_schema, load_profile_schema, validate_catalog
 from .responses import verify_native_response
 from .rest_backend import RestBackend
 from .settings import Settings
@@ -87,19 +87,25 @@ def rest_tools(enable_effective_username_test: bool = False) -> dict[str, Tool]:
             title="Get semantic model schema",
             description=(
                 _SHARED_IDENTITY_NOTICE
-                + "Return the project-owned OSSIE-derived Fabric/DAX profile for the model. "
+                + "Return the schema needed to write DAX: tables and columns with types, every measure "
+                "with its exact DAX name (use it verbatim, e.g. [Total Clients]) and definition, and "
+                "relationships (inactive ones need USERELATIONSHIP). detail='full' returns the complete "
+                "OSSIE-derived Fabric/DAX author catalog (~80K tokens) for audits, not query writing. "
                 "This is an offline author snapshot, not the native Microsoft schema."
             ),
             input_schema={
                 "type": "object",
                 "required": ["model_id"],
                 "additionalProperties": False,
-                "properties": {"model_id": uuid_property},
+                "properties": {
+                    "model_id": uuid_property,
+                    "detail": {"type": "string", "enum": ["compact", "full"], "default": "compact"},
+                },
             },
             output_schema={
                 "type": "object",
-                "required": ["profile_id", "profile_version", "semantic_document"],
-                "properties": {"profile_id": {"const": PROFILE_ID}, "semantic_document": {"type": "object"}},
+                "required": ["profile_id", "profile_version"],
+                "properties": {"profile_id": {"const": PROFILE_ID}, "view": {"const": "compact"}},
             },
             annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False),
         ),
@@ -167,6 +173,7 @@ class Application:
         validate_catalog(catalog)
         self.settings = settings
         self.catalog = deepcopy(catalog)
+        self.compact_catalog = compact_schema(self.catalog)
         self.manifest = manifest
         self.rest: RestBackend | None = backend if isinstance(backend, RestBackend) else None
         self.backend: Backend | None = None if isinstance(backend, RestBackend) else backend
@@ -322,7 +329,7 @@ class Application:
                     data = await self.rest.report_metadata()
                 else:
                     # A catalog read is an author snapshot; it never proves live definition equality.
-                    data = self.catalog
+                    data = self.catalog if args.get("detail") == "full" else self.compact_catalog
             result = result_data(data)
             result.meta = {"wealth-management-mcp/provenance": {
                 "completeness": "unknown", "data_freshness": "unknown",

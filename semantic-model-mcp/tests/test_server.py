@@ -220,6 +220,30 @@ async def test_effective_username_tool_is_opt_in_and_server_allowlisted(catalog)
 
 
 @pytest.mark.asyncio
+async def test_rest_schema_is_compact_by_default_and_full_on_request(catalog) -> None:
+    settings = Settings(**IDS, backend="fabric_rest", tenant_id=OTHER_ID, allow_author_catalog=True)
+    app = Application(settings, catalog, backend=FakeRestBackend(settings))
+    args = {"model_id": IDS["semantic_model_id"]}
+    async with Client(app.server(), cache=None) as client:
+        compact = (await client.call_tool("get_semantic_model_schema", args)).structured_content
+        full = (await client.call_tool("get_semantic_model_schema", {**args, "detail": "full"})).structured_content
+        bad = await client.call_tool("get_semantic_model_schema", {**args, "detail": "everything"})
+    assert full == catalog
+    assert bad.is_error
+    assert compact["view"] == "compact" and compact["profile_id"] == PROFILE_ID
+    assert [table["name"] for table in compact["tables"]] == ["dim_item", "fact_event"]
+    # Catalog canonical names are not valid DAX; the compact view must expose the invokable name.
+    assert compact["measures"] == [{"name": "[Value %]", "table": "dim_item",
+                                    "expression": " DIVIDE(SUM('fact_event'[value]), 2)\n"}]
+    assert compact["relationships"] == [{"from": "'fact_event'[item_id]", "to": "'dim_item'[item_id]",
+                                         "active": False, "cross_filter": "single"}]
+    text = json.dumps(compact)
+    for leaked in ("PRIVATE_", "lineage_tag", "artifact_sha256", "source_pointer", "custom_extensions"):
+        assert leaked not in text
+    assert len(text) * 3 < len(json.dumps(catalog))
+
+
+@pytest.mark.asyncio
 async def test_allowlists_and_exact_input_contract_reject_before_backend(live) -> None:
     app, backend = live(enable_generate_query=True, allow_author_catalog=True, allow_unverified_live_definition=True)
     cases = []

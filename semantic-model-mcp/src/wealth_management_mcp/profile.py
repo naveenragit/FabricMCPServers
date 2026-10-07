@@ -725,3 +725,46 @@ def validate_catalog(catalog: dict[str, Any]) -> None:
         raise ValueError("Required offline/security/inventory warnings do not match the catalog")
     if catalog["catalog_sha256"] != compute_catalog_sha256(catalog):
         raise ValueError("Catalog SHA-256 mismatch")
+
+
+def compact_schema(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Agent-facing view of a validated catalog, using names that DAX accepts verbatim.
+
+    Provenance traces, lineage tags, hashes and native IDs make up most of the full catalog
+    but never inform query writing, so they are omitted here.
+    """
+    model = catalog["semantic_document"]["semantic_model"][0]
+
+    def described(entry: dict[str, Any], description: str | None) -> dict[str, Any]:
+        return {**entry, "description": description} if description else entry
+
+    tables = []
+    for dataset in model["datasets"]:
+        columns = [
+            described({"name": _payload(field)["native"]["name"], "type": field.get("datatype", "Unknown")},
+                      field.get("description"))
+            for field in dataset["fields"]
+        ]
+        tables.append({**described({"name": _payload(dataset)["native"]["name"]}, dataset.get("description")),
+                       "columns": columns})
+    measures = []
+    for metric in model["metrics"]:
+        payload = _payload(metric)
+        entry = {"name": payload["invocation_reference"], "table": payload["native"]["home_table"],
+                 "expression": _dax(metric)}
+        if payload["native"]["format_string"]:
+            entry["format"] = payload["native"]["format_string"]
+        measures.append(described(entry, metric.get("description")))
+    relationships = []
+    for relation in model["relationships"]:
+        payload = _payload(relation)
+        ends = {side: ", ".join(dax_column_reference(payload["native"][side]["table"], column)
+                                for column in payload["native"][side]["columns"]) for side in ("from", "to")}
+        entry = {**ends, "active": payload["is_active"],
+                 "cross_filter": "both" if payload["cross_filtering_behavior"] == "both_directions" else "single"}
+        relationships.append(described(entry, payload.get("reviewed_description")))
+    return {
+        "profile_id": catalog["profile_id"], "profile_version": catalog["profile_version"], "view": "compact",
+        **described({"model": model["name"]}, model.get("description")),
+        "tables": tables, "measures": measures, "relationships": relationships, "notes": catalog["warnings"],
+    }
