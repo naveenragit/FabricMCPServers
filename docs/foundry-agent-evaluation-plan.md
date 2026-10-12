@@ -1,6 +1,6 @@
 # Foundry agent evaluation plan: three agents over Fabric data
 
-**Created:** 2026-10-09. **Updated:** 2026-10-12 (data agent confirmed; tool connection steps; fluency and coherence; adversarial review fixes; arm 3 through the data agent MCP endpoint with a service principal; direct-call fallback removed).
+**Created:** 2026-10-09. **Updated:** 2026-10-12 (data agent confirmed; tool connection steps; fluency and coherence; adversarial review fixes; arm 3 through the data agent MCP endpoint as the signed-in user (service principal rejected, see D15); direct-call fallback removed).
 **Status:** Phase 0 has started for arm 3 only (2026-10-12): the proxy package `fabric-dataagent-mcp/`, `.env.example`, and a local `.env` exist, and nothing is deployed. No Foundry agents, connections, evaluators, datasets, or runs exist yet. The Fabric data agent exists but is not yet published, which its MCP endpoint requires.
 **Supersedes:** [foundry-evaluation-plan.md](foundry-evaluation-plan.md), the earlier raw / measure-free / with-measures three-arm design.
 
@@ -20,11 +20,12 @@
 | D10 | The Fabric data agent is grounded on the semantic model only, so arm 3 compares against arm 1 on identical data | You |
 | D11 | The data agent already exists. Phase 0 verifies it and records its configuration; it does not create it | You |
 | D12 | The Foundry agent connected to the data agent uses the same instructions as the other two agents | You |
-| D13 | Arm 3 reaches the Fabric data agent through its MCP endpoint, authenticated as a service principal, not through the Foundry Fabric data agent tool | You |
-| A2 | Foundry reaches that endpoint through a thin proxy MCP server that holds the service principal and forwards questions unchanged. Foundry then sees an ordinary unauthenticated custom MCP tool, like arms 1 and 2 | You |
+| D13 | Arm 3 reaches the Fabric data agent through its MCP endpoint, not through the Foundry Fabric data agent tool | You |
+| A2 | Foundry reaches that endpoint through a thin proxy MCP server that holds the credential and forwards questions unchanged. Foundry then sees an ordinary unauthenticated custom MCP tool, like arms 1 and 2 | You |
 | D14 | Arm 3 is always a Foundry agent that calls the data agent MCP endpoint as a tool. No fallback is planned: implement the proxy route first, and if G3 fails, stop and report so a workaround can be chosen then | You |
+| D15 | The proxy calls the data agent as your signed-in Entra user (Azure CLI session), not a service principal. A service principal reaches the endpoint but the data agent cannot read the semantic model as one (see Phase 0 findings) | You |
 
-D13 is documented as preview. The data agent MCP endpoint accepts a service-principal token only from a direct MCP client. Foundry's own connections to a data agent act as a signed-in user, which an unattended evaluation cannot supply, and managed identities are not supported. You chose the proxy (A2) over a bearer token stored in the Foundry connection and over a direct harness, because it keeps D12 and runs unattended. Under D14, a failure of this route is not worked around in advance.
+D13 is documented as preview. Foundry's own connections to a data agent act as a signed-in user, which an unattended evaluation cannot supply, so arm 3 uses the proxy (A2) rather than the Foundry tool, a bearer token stored in the Foundry connection, or a direct harness. The proxy keeps D12 and runs unattended. Under D14, a failure of this route is not worked around in advance. D15 records the one change that route needed: the identity.
 
 D12 covers the Foundry agent's instructions. The data agent's own instructions are whatever it already has. Phase 0 snapshots them, and the results disclose them. A Power BI semantic model source does not support example queries, so there are none to disclose.
 
@@ -37,8 +38,8 @@ Arm 1 is `wm-dax-agent`, arm 2 is `wm-sql-agent`, and arm 3 is `wm-fabric-agent`
 | Data path | Semantic model through `semantic-model-mcp` | Lakehouse tables through `onelake-tables-mcp` | Fabric data agent grounded on the semantic model, reached through its MCP endpoint |
 | Tools exposed | `get_semantic_model_schema` (compact view), `execute_dax_query` | `get_database_schema`, `execute_sql` | One proxy tool that forwards a natural-language question to the data agent (name fixed in Phase 0) |
 | Who writes the query | The Foundry agent writes DAX | The Foundry agent writes T-SQL | Fabric's NL2DAX inside the data agent; the Foundry agent passes natural language |
-| Foundry to tool auth | Custom MCP tool, unauthenticated connection (accepted POC scope) | Custom MCP tool, unauthenticated connection (accepted POC scope) | Custom MCP tool on our proxy, unauthenticated connection (accepted POC scope). The proxy authenticates to Fabric as a service principal (preview); managed identities are not supported by the data agent |
-| Backend identity | The DAX server's App Service managed identity (workspace Member), `executeDaxQueries` | The SQL server's App Service managed identity (workspace Viewer with table-level DENYs) | A service principal with workspace Member access, calling the data agent MCP endpoint |
+| Foundry to tool auth | Custom MCP tool, unauthenticated connection (accepted POC scope) | Custom MCP tool, unauthenticated connection (accepted POC scope) | Custom MCP tool on our proxy, unauthenticated connection (accepted POC scope). The proxy authenticates to Fabric as your signed-in user through the Azure CLI session, so it runs where that session exists (D15). The data agent supports neither managed identities nor, in practice here, service principals |
+| Backend identity | The DAX server's App Service managed identity (workspace Member), `executeDaxQueries` | The SQL server's App Service managed identity (workspace Viewer with table-level DENYs) | A workspace Admin or Member user (your signed-in Entra account), calling the data agent MCP endpoint |
 | Query visible in traces | Yes, DAX text and results | Yes, SQL text and results | No. Only the question and the returned answer |
 | Platform limits | 60 s server timeout, row and byte caps | 60 s server timeout, 1,000-row cap | Answers capped at 25 rows and 25 columns; long queries may need background mode because of Foundry's 100 s cut-off; fixed internal LLM |
 
@@ -70,7 +71,7 @@ The Foundry resource, agent model, and judge model are read from `.env`. Nothing
 | `SEMANTIC_MCP_CONNECTION_NAME`, `ONELAKE_MCP_CONNECTION_NAME` | Names of the Foundry project connections for arms 1 and 2 |
 | `FABRIC_WORKSPACE_ID`, `FABRIC_DATA_AGENT_ID` | Arm 3 data agent location (`workspace_id` and `artifact_id` in the data agent URL) |
 | `FABRIC_DATA_AGENT_MCP_URL` | The data agent MCP endpoint that the proxy calls; derivable from the two IDs above |
-| `FABRIC_SPN_CLIENT_ID`, `FABRIC_SPN_CLIENT_SECRET` | The service principal for the data agent endpoint. The tenant is `AZURE_TENANT_ID`. The secret also goes to the proxy as an app setting and never into a tracked file |
+| `FABRIC_SPN_CLIENT_ID`, `FABRIC_SPN_CLIENT_SECRET` | A service principal for the data agent endpoint. Unused while arm 3 runs as the signed-in user (D15); kept only if the service principal route is revisited. The secret never goes into a tracked file |
 | `FABRIC_PROXY_MCP_URL`, `FABRIC_PROXY_CONNECTION_NAME` | Arm 3 proxy endpoint (ends in `/mcp`) and its Foundry project connection |
 | `INJECTION_STUB_URL` | Base URL of the test-only stub MCP servers for R12, one path per tool contract (Phase 2) |
 | `EVAL_REPEATS` | Default `3` |
@@ -85,7 +86,7 @@ Housekeeping, all part of Phase 0:
 
 ## 4. Phases
 
-Phase 0 is in progress for arm 3 (proxy built and tested locally; blocked on publishing the data agent and creating the service principal). The rest of Phase 0 has not started.
+Phase 0 is in progress for arm 3: the proxy is built, tested, and answers correctly as the signed-in user when run locally. Making it reachable from Foundry and creating the agents are next. The rest of Phase 0 has not started.
 
 ### Phase 0: foundation and pilot gates
 
@@ -95,8 +96,8 @@ Phase 0 is in progress for arm 3 (proxy built and tested locally; blocked on pub
 4. Arm 3 prerequisites on the Fabric side. The data agent already exists (D11), so verify and record:
    - It is published, grounded on the semantic model only, and its data source is on a capacity in the same region.
    - Its configuration: sources, selected tables, agent instructions. Save a snapshot with the run evidence.
-   - The service principal (D13). Register an Entra app and add a credential: a secret, a certificate, or a federated credential. A Fabric tenant admin enables **Service principals can use Fabric APIs**. It was enabled for the whole organization on 2026-09-14, so recheck it, because a setting scoped to a group that excludes the service principal looks the same as a setting that is off. Add the service principal to the workspace as **Member** or **Contributor**, which also gives it read access to the semantic model. Managed identities are not supported by the data agent, and service principals are not supported for data agents on a KQL database, which this one is not.
-   - Row-level security. The deployed model definition lists roles named Advisor and View All, although an earlier scan reported none, so recheck. A workspace Member is not filtered by roles, so the service principal sees every row, as the DAX server's identity does. You confirmed that the data agent sees all rows; G6 still verifies it.
+   - The identity (D15). The proxy signs in as your Entra user through the Azure CLI, so that user must stay signed in (`az login`) while arm 3 runs, and must be a workspace Admin or Member with read access to the semantic model. A service principal was tried and rejected: the endpoint accepts it with either documented token scope, but the data agent could not read the model as one. Managed identities are not supported by the data agent.
+   - Row-level security. The deployed model definition lists roles named Advisor and View All, although an earlier scan reported none, so recheck. A workspace Admin or Member is not filtered by roles, so the signed-in user sees every row, as the DAX server's identity does. You confirmed that the data agent sees all rows; G6 still verifies it.
    - The data agent tenant settings (Copilot and Azure OpenAI switch, Fabric Copilot capacity designation, cross-geo processing and storage where required) are enabled. They must already be, since the agent exists. Names change often, so verify them in the admin portal before relying on this list.
 5. Build and deploy the arm 3 proxy MCP server (new and small). Then add the three tools to Foundry and create the three agents with the controls in section 2. Follow [Reference: connecting the tools to Foundry](#reference-connecting-the-tools-to-foundry).
 6. Run gates G1–G7 and G9 below on a handful of rows (Q01, Q10, and one risk row), not the dev split. G8 needs the dataset and the custom evaluators, so it is the exit gate of Phase 2.
@@ -106,7 +107,7 @@ Phase 0 is in progress for arm 3 (proxy built and tested locally; blocked on pub
 |---|---|---|
 | G1 | A dataset upload and a trivial cloud evaluation run succeed under the tenant's storage governance | Stop; governance can block managed storage |
 | G2 | Arms 1 and 2 reach their MCP servers from Foundry: tool listing and one call each. `allowed_tools` and `require_approval: never` are in effect | Fix connection or schema |
-| G3 | Arm 3 reaches the data agent unattended. First, the service principal gets a token, and the endpoint's tool listing and one question succeed; record which token scope works, because the two documents name different ones (`https://api.fabric.microsoft.com/.default` and `https://analysis.windows.net/powerbi/api/.default`). Then the same question succeeds from a cloud evaluation run through the proxy, with no consent prompt, and the answer is equivalent to a direct call | Stop and report what failed: the endpoint refusing the service principal, or Foundry unable to call the proxy. No fallback is planned (D14) |
+| G3 | Arm 3 reaches the data agent unattended. First, as the signed-in user, the endpoint's tool listing and one question succeed. Then the same question succeeds from a cloud evaluation run through the proxy, with no consent prompt, and the answer is equivalent to a direct call | Stop and report what failed: the endpoint refusing the identity, or Foundry unable to call the proxy. No fallback is planned (D14) |
 | G4 | `sample.output_items` carries the MCP calls and results; tool definitions and Policy v1 reach the evaluators; a throwaway code evaluator can read the output items | Adjust data mapping; if impossible, rebuild checks on stored traces |
 | G5 | Process evaluators return real scores, not errors or not-applicable, for each arm. The proxy tool is an ordinary MCP tool, so the limited-support listing for the Fabric data agent tool should not apply, but one call to a black box still limits what they measure | Mark the unsupported metrics as limited for that arm |
 | G6 | Identity parity: Q01 and Q10 give the reference answers on all three arms | Investigate security roles and identity |
@@ -118,7 +119,8 @@ Phase 0 is in progress for arm 3 (proxy built and tested locally; blocked on pub
 
 - The data agent MCP endpoint works from our proxy code. It advertises exactly one tool, `DataAgent_<agent name>`, with one required string argument `userQuestion` and an empty description. A client on the SDK's default protocol negotiation fails, because the endpoint answers discovery with protocol 2026-07-28 but omits two fields that version requires. The proxy therefore uses the older `initialize` handshake.
 - Both documented token scopes are accepted for a service principal: the endpoint lists its tool and returns an answer with either. Scope is not the problem.
-- **G3 is not yet met.** As a service principal the data agent usually cannot read the semantic model: five of six answers were "data service unavailable", and the same question answered correctly for the signed-in user four times out of four. Calling the model directly as that service principal gives the same split: `executeQueries` is refused (401) and `executeDaxQueries` succeeds. The deployed model defines two security roles, and Microsoft documents `executeQueries` as unsupported for service principals on models with row-level security, so this is the likely cause. Per D14 this stops here and a workaround is chosen with you.
+- A service principal is not workable (D15). The data agent usually cannot read the semantic model as one: five of six answers were "data service unavailable", while the same question answered correctly for the signed-in user four times out of four. Calling the model directly as that service principal gives the same split: `executeQueries` is refused (401) and `executeDaxQueries` succeeds. The deployed model defines two security roles, and Microsoft documents `executeQueries` as unsupported for service principals on models with row-level security, so this is the likely cause.
+- **G3, first half, is met as the signed-in user.** The proxy, run locally over HTTP with the Azure CLI identity, listed its tool and answered both baseline questions (Q01 and Q10) correctly, in 19 and 23 seconds. The second half, a call from a Foundry evaluation run, needs the proxy reachable from Foundry and is not yet done.
 - A latency note for the plan: a single question takes about 13 to 26 seconds, so the 100-second Foundry cut-off is not close for simple questions.
 
 ### Reference: connecting the tools to Foundry
@@ -180,20 +182,20 @@ A toolbox bundles tools behind one managed MCP endpoint, with central authentica
 | The call stalls on approval | `require_approval` is `always` | Set it to `never` for these read-only tools |
 | Timeout | Foundry cuts non-streaming MCP calls at 100 seconds. Our server limit is 60 seconds | Aggregate or narrow the query |
 | Unreachable | Private endpoint without the standard setup, or the app is stopped | Our endpoints are public; check the app is running |
-| The proxy returns an authorization error from Fabric | Wrong token scope, the tenant setting is off or scoped to a group that excludes the service principal, the service principal is not in the workspace, or it lacks read access to the semantic model | Check in that order |
+| The proxy returns an authorization error from Fabric | The signed-in Azure CLI session expired (`az login`), the user is not in the workspace, or it lacks read access to the semantic model | Check in that order |
 | An arm 3 call times out | Data agent queries can pass Foundry's 100-second cut-off | Use background mode on a model that supports it, and record any remaining timeouts as a platform limit |
 
 **Arm 3: connecting the existing Fabric data agent**
 
-Foundry's own Fabric connections to a data agent act as a signed-in user, which an unattended evaluation cannot supply. The data agent's MCP endpoint accepts a service-principal token from a direct MCP client (preview), so arm 3 goes through the endpoint as a service principal (D13).
+Foundry's own Fabric connections to a data agent act as a signed-in user, which an unattended evaluation cannot supply. The data agent's MCP endpoint accepts a bearer token from a direct MCP client, so arm 3 goes through the endpoint with a proxy that signs in as the developer (D13, D15).
 
 *Option 3a, a thin proxy MCP server (used; A2, confirmed):*
 
 1. The endpoint is `https://<fabric-api-host>/v1/mcp/workspaces/<workspace-id>/dataagents/<data-agent-id>/agent`, built from `FABRIC_WORKSPACE_ID` and `FABRIC_DATA_AGENT_ID`. Phase 0 lists its tools and records their names and input schema.
-2. The proxy is a new package (proposed `fabric-dataagent-mcp/`) that mirrors `onelake-tables-mcp`: a remote HTTP server on App Service, path `/mcp`, no inbound authentication (the accepted POC scope), synthetic data only.
-3. It exposes one tool that takes a natural-language question and forwards it to the endpoint as the service principal, using the client-credentials flow. It returns the answer unchanged, with no rewriting, retrying, truncation, or added instructions, so that arm 3 stays the data agent's own behavior. It logs latency and upstream errors.
+2. The proxy is the package `fabric-dataagent-mcp/`, which mirrors `onelake-tables-mcp`: an HTTP server with path `/mcp`, no inbound authentication (the accepted POC scope), synthetic data only. Because it signs in as the developer through the Azure CLI (D15), it runs on the developer's machine, and Foundry must reach it through a public tunnel. Hosting it on App Service would need a stored user credential, which is a separate decision.
+3. It exposes one tool that takes a natural-language question and forwards it to the endpoint as the signed-in user. It returns the answer unchanged, with no rewriting, retrying, truncation, or added instructions, so that arm 3 stays the data agent's own behavior. It logs latency and upstream errors.
 4. The tool definition follows the schema rules above: one string parameter and no `anyOf`. Policy v1 lives in the Foundry agent's instructions (D12), not in the proxy.
-5. The secret is an App Service app setting, not a file in the repository. A federated credential avoids a stored secret and is the alternative. The service principal cannot be the App Service's managed identity, because the data agent does not support managed identities.
+5. No secret is stored: the proxy uses the developer's Azure CLI token. The tunnel exposes the proxy, and so the developer's access to the data agent, to anyone who has its URL. That is the same accepted POC exposure as arms 1 and 2, but it uses a person's identity, so keep the tunnel up only while arm 3 runs.
 6. Foundry treats it like arms 1 and 2: a connection with authentication none, `allowed_tools` pinned to the one tool, and `require_approval: never`.
 7. Long data agent queries can pass Foundry's 100-second cut-off for non-streaming MCP calls. Run arm 3 in background mode on a model that supports it, and record any remaining timeouts as a platform limit.
 
@@ -423,7 +425,7 @@ The risk-set coverage and the policy are in [evaluation-risk-questions.md](evalu
 - **Preview evaluators.** `task_completion`, `response_completeness`, `task_adherence`, `intent_resolution`, the composites, the rubric evaluator, `prohibited_actions`, and `sensitive_data_leakage` are preview and may change.
 - **Red teaming support is unverified** for MCP and Fabric tools (G9).
 - **Judge reliability.** An LLM judge can be inconsistent on borderline phrasing. The numeric audit, the calibration set, and manual review of disagreements are the controls.
-- **Identity differs.** Arms 1 and 2 reach the data as the MCP servers' own App Service managed identities. Arm 3 uses a service principal. All three are non-interactive identities, and row-level security roles do not filter workspace Members, which the DAX server's identity and the service principal both are. G6 checks that identity does not change results.
+- **Identity differs.** Arms 1 and 2 reach the data as the MCP servers' own App Service managed identities. Arm 3 uses the developer's signed-in Entra user, which is a workspace Admin or Member. All three identities are workspace members, and row-level security roles do not filter workspace members. G6 checks that identity does not change results.
 - **Region and residency.** The data agent and its source must be on capacities in the same region. The Foundry project may be in a different region than Fabric, in which case results cross regions.
 - **POC endpoints are unauthenticated.** This was accepted for the POC and is unchanged. Do not use real client data.
 - **One synthetic dataset.** The result is a case study, not a general claim.
