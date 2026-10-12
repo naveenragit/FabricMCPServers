@@ -72,7 +72,8 @@ def main() -> int:
                 return len(records)
 
             with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                total = sum(pool.map(local, store.attempts()))
+                scoreable = [a for a in store.attempts() if not a.infra_error]  # infrastructure errors are not scored
+                total = sum(pool.map(local, scoreable))
             print(f"   local evaluators: {total} results")
         if not args.no_cloud:
             records, failures = evaluate_run_in_cloud(client, store, judge_model, CLOUD, workers=args.workers)

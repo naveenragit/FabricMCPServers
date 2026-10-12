@@ -108,7 +108,9 @@ def _looks_infra(exc: BaseException) -> bool:
 
 # Foundry reports these inside a streamed error with no status code, so the text is the only signal. The patterns are
 # narrow on purpose: a tool's own error ("An error occurred invoking '<tool>'") is never infrastructure (D17).
-_INFRA_MESSAGE = re.compile(r"rate limit exceeded|too many requests|\[Failed Dependency\]", re.IGNORECASE)
+_INFRA_MESSAGE = re.compile(
+    r"rate limit exceeded|too many requests|\[Failed Dependency\]|model deployment encountered an error", re.IGNORECASE
+)
 
 
 def _infra_message(message: str | None) -> bool:

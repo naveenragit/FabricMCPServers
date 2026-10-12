@@ -40,6 +40,13 @@ def main() -> int:
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
     attempts, evals, runs = tables["attempts"], tables["evaluations"], tables["runs"]
+    # Attempts that ended on an infrastructure error (rate limit, tunnel, connection) say nothing about the arm: they are
+    # excluded from every score and counted in the overview. A retried attempt is a separate record that is scored.
+    infra_ids = set(attempts.loc[attempts["infra_error"] == True, "attempt_id"])  # noqa: E712
+    infra_by_arm = attempts[attempts["attempt_id"].isin(infra_ids)].groupby("arm").size()
+    superseded = int(attempts["retry_of"].notna().sum())
+    attempts = attempts[~attempts["attempt_id"].isin(infra_ids)]
+    evals = evals[~evals["attempt_id"].isin(infra_ids)]
     ok = evals[evals["status"] == "ok"]
     out: list[str] = []
 
@@ -47,7 +54,11 @@ def main() -> int:
         out.append(f"\n## {title}\n")
 
     out.append("# Scorecard\n")
-    out.append(f"Runs: {', '.join(args.run_ids)}. Attempts: {len(attempts)}. Rows are arm columns; missing is n/a.\n")
+    out.append(f"Runs: {', '.join(args.run_ids)}. Scored attempts: {len(attempts)}. Rows are arm columns; missing is n/a.\n")
+    out.append(
+        f"Excluded as infrastructure errors (rate limit, tunnel, connection): {len(infra_ids)} attempts"
+        f" ({', '.join(f'{a}: {n}' for a, n in infra_by_arm.items()) or 'none'}); {superseded} of them were retried.\n"
+    )
 
     section("Run overview")
     over = runs.set_index("arm")[["agent_name", "agent_version", "agent_model", "reasoning_effort", "judge_model", "n_attempts", "n_completed", "n_failed", "n_infra_errors", "n_tool_errors"]]
@@ -64,6 +75,25 @@ def main() -> int:
     if len(audit):
         a = audit.groupby("arm")["score"].apply(lambda s: (s == 1.0).mean())
         out.append("\nnumeric_audit (deterministic; all expected figures found): " + ", ".join(f"{k}={pct(v)}" for k, v in a.items()))
+
+    section("Repeat consistency (criteria_judge, rows with every repeat scored; correct = all criteria met)")
+    cons = []
+    for arm, g in cj.groupby("arm"):
+        per_row = g.assign(correct=g["score"] == 1.0).groupby("question_id")["correct"].agg(["sum", "count"])
+        full = per_row[per_row["count"] >= 2]
+        if full.empty:
+            continue
+        cons.append(
+            {
+                "arm": arm,
+                "rows": len(full),
+                "correct_every_repeat": pct((full["sum"] == full["count"]).mean()),
+                "correct_at_least_once": pct((full["sum"] > 0).mean()),
+                "mixed_outcomes": pct(((full["sum"] > 0) & (full["sum"] < full["count"])).mean()),
+                "mean_repeat_correct": pct((full["sum"] / full["count"]).mean()),
+            }
+        )
+    out.append(pd.DataFrame(cons).set_index("arm").to_string() if cons else "not enough repeats")
 
     section("Per-row result (criteria_judge score; TOOL-ERR = a tool error ended the attempt)")
     wide = cj.pivot_table(index="question_id", columns="arm", values="score", aggfunc="last")

@@ -204,6 +204,7 @@ def test_rate_limit_and_failed_dependency_are_infra_but_a_tool_error_is_not():
     assert attempt_for("[Failed Dependency] while invoking tool x, the dependency call to the MCP server failed").infra_error
     tool = attempt_for("An error occurred invoking 'x': Model rate limit exceeded upstream")
     assert tool.tool_error and not tool.infra_error
+    assert attempt_for("The model deployment encountered an error processing your request. You can retry.").infra_error
 
 
 def test_non_streaming_records_totals_only_and_accepts_sdk_style_models():
