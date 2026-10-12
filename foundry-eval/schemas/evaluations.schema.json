@@ -1,0 +1,270 @@
+{
+  "additionalProperties": false,
+  "description": "One evaluator's verdict on one attempt.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "eval_id": {
+      "title": "Eval Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "arm": {
+      "enum": [
+        "dax",
+        "sql",
+        "fabric"
+      ],
+      "title": "Arm",
+      "type": "string"
+    },
+    "question_id": {
+      "title": "Question Id",
+      "type": "string"
+    },
+    "repeat_index": {
+      "default": 0,
+      "title": "Repeat Index",
+      "type": "integer"
+    },
+    "evaluator": {
+      "title": "Evaluator",
+      "type": "string"
+    },
+    "evaluator_kind": {
+      "enum": [
+        "builtin",
+        "custom_code",
+        "custom_prompt",
+        "red_team",
+        "human"
+      ],
+      "title": "Evaluator Kind",
+      "type": "string"
+    },
+    "category": {
+      "enum": [
+        "accuracy",
+        "agentic",
+        "quality",
+        "risk",
+        "safety"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "evaluator_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Evaluator Version"
+    },
+    "status": {
+      "default": "ok",
+      "enum": [
+        "ok",
+        "error",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Score"
+    },
+    "passed": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Passed"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
+    "threshold": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Threshold"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "details": {
+      "additionalProperties": true,
+      "description": "E.g. per-criterion results",
+      "title": "Details",
+      "type": "object"
+    },
+    "judge_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Judge Model"
+    },
+    "judge_input_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Kept apart from agent tokens",
+      "title": "Judge Input Tokens"
+    },
+    "judge_output_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Judge Output Tokens"
+    },
+    "duration_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Duration S"
+    },
+    "evaluated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Evaluated At"
+    },
+    "foundry_eval_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Foundry Eval Id"
+    },
+    "foundry_eval_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Foundry Eval Run Id"
+    },
+    "foundry_output_item_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Foundry Output Item Id"
+    },
+    "human_reviewed": {
+      "default": false,
+      "title": "Human Reviewed",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "eval_id",
+    "attempt_id",
+    "run_id",
+    "arm",
+    "question_id",
+    "evaluator",
+    "evaluator_kind",
+    "category"
+  ],
+  "title": "EvaluationRecord",
+  "type": "object"
+}

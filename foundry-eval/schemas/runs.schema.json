@@ -1,0 +1,352 @@
+{
+  "additionalProperties": false,
+  "description": "One execution of one arm: what was run, and the total time the agent code took.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "batch_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Groups the arms launched together",
+      "title": "Batch Id"
+    },
+    "arm": {
+      "enum": [
+        "dax",
+        "sql",
+        "fabric"
+      ],
+      "title": "Arm",
+      "type": "string"
+    },
+    "status": {
+      "default": "running",
+      "enum": [
+        "running",
+        "completed",
+        "partial",
+        "failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ended At"
+    },
+    "wall_time_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Total time the arm's agent code took to run",
+      "title": "Wall Time S"
+    },
+    "agent_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Name"
+    },
+    "agent_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Version"
+    },
+    "agent_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Deployment the agent was configured with",
+      "title": "Agent Model"
+    },
+    "reasoning_effort": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reasoning Effort"
+    },
+    "judge_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Judge Model"
+    },
+    "instructions_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Instructions Sha256"
+    },
+    "policy_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Version"
+    },
+    "tools": {
+      "description": "server_label:tool_name, as allowlisted",
+      "items": {
+        "type": "string"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "schema_tools": {
+      "description": "Tool names counted as schema discovery rather than querying",
+      "items": {
+        "type": "string"
+      },
+      "title": "Schema Tools",
+      "type": "array"
+    },
+    "dataset_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Name"
+    },
+    "dataset_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Sha256"
+    },
+    "dataset_split": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Split"
+    },
+    "repeats": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Repeats"
+    },
+    "concurrency": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Concurrency"
+    },
+    "git_sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Git Sha"
+    },
+    "git_dirty": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Git Dirty"
+    },
+    "harness_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Harness Version"
+    },
+    "environment": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Free-form: region, capacity SKU and state, cache warm or cold",
+      "title": "Environment",
+      "type": "object"
+    },
+    "n_attempts": {
+      "default": 0,
+      "title": "N Attempts",
+      "type": "integer"
+    },
+    "n_completed": {
+      "default": 0,
+      "title": "N Completed",
+      "type": "integer"
+    },
+    "n_failed": {
+      "default": 0,
+      "title": "N Failed",
+      "type": "integer"
+    },
+    "n_infra_errors": {
+      "default": 0,
+      "title": "N Infra Errors",
+      "type": "integer"
+    },
+    "input_tokens": {
+      "default": 0,
+      "title": "Input Tokens",
+      "type": "integer"
+    },
+    "cached_input_tokens": {
+      "default": 0,
+      "title": "Cached Input Tokens",
+      "type": "integer"
+    },
+    "output_tokens": {
+      "default": 0,
+      "title": "Output Tokens",
+      "type": "integer"
+    },
+    "reasoning_tokens": {
+      "default": 0,
+      "title": "Reasoning Tokens",
+      "type": "integer"
+    },
+    "total_tokens": {
+      "default": 0,
+      "title": "Total Tokens",
+      "type": "integer"
+    },
+    "tool_time_s": {
+      "default": 0.0,
+      "title": "Tool Time S",
+      "type": "number"
+    },
+    "reasoning_time_s": {
+      "default": 0.0,
+      "title": "Reasoning Time S",
+      "type": "number"
+    },
+    "attempts_duration_s": {
+      "default": 0.0,
+      "description": "Sum of attempt durations (differs from wall time when concurrent)",
+      "title": "Attempts Duration S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "run_id",
+    "arm",
+    "started_at"
+  ],
+  "title": "RunRecord",
+  "type": "object"
+}

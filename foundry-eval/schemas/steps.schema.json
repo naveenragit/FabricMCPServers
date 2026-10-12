@@ -1,0 +1,264 @@
+{
+  "additionalProperties": false,
+  "description": "One output item of an attempt, in order.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "step_id": {
+      "title": "Step Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "arm": {
+      "enum": [
+        "dax",
+        "sql",
+        "fabric"
+      ],
+      "title": "Arm",
+      "type": "string"
+    },
+    "index": {
+      "title": "Index",
+      "type": "integer"
+    },
+    "kind": {
+      "enum": [
+        "reasoning",
+        "tool_list",
+        "tool_call",
+        "message",
+        "other"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "item_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Item Type"
+    },
+    "start_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Offset from attempt start",
+      "title": "Start S"
+    },
+    "duration_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Duration S"
+    },
+    "timing_basis": {
+      "default": "none",
+      "enum": [
+        "args_done",
+        "in_progress",
+        "item_span",
+        "none"
+      ],
+      "title": "Timing Basis",
+      "type": "string"
+    },
+    "server_label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Server Label"
+    },
+    "tool_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool Name"
+    },
+    "is_schema_call": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Is Schema Call"
+    },
+    "arguments": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Arguments"
+    },
+    "query_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The DAX, SQL or natural-language question sent",
+      "title": "Query Text"
+    },
+    "output_chars": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Chars"
+    },
+    "output_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Sha256"
+    },
+    "output_preview": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Preview"
+    },
+    "tool_status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool Status"
+    },
+    "tool_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool Error"
+    },
+    "server_reported_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Time the tool server measured itself, joined in from its logs",
+      "title": "Server Reported S"
+    },
+    "text_chars": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text Chars"
+    },
+    "summary_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Reasoning summary, when the platform returns one",
+      "title": "Summary Text"
+    }
+  },
+  "required": [
+    "step_id",
+    "attempt_id",
+    "run_id",
+    "arm",
+    "index",
+    "kind"
+  ],
+  "title": "StepRecord",
+  "type": "object"
+}

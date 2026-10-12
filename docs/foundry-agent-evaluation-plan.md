@@ -405,6 +405,23 @@ The risk-set coverage and the policy are in [evaluation-risk-questions.md](evalu
 - Infrastructure errors (connection, timeout, rate limit) are logged separately from agent failures and re-run once. They are never silently dropped.
 - Evaluation is single-turn at turn level. Multi-turn attacks and drift are out of scope.
 
+### 7.1 Run records
+
+The harness package `foundry-eval/` writes each arm's run to `artifacts/runs/<run_id>/` as four flat tables, joined by ids and described by the JSON Schemas in `foundry-eval/schemas/`. Unknown values are null, never zero.
+
+| Table | One row per | Holds |
+|---|---|---|
+| `runs` | arm execution | Total wall time of the arm's agent code; agent, version, model deployment, reasoning effort, judge model, instruction hash, tools; dataset hash and split; git SHA; environment notes; roll-ups of tokens, time and failures |
+| `attempts` | question × repeat | Question and answer; status and infrastructure-error flag; duration, time to first token; thinking, tool, tool-discovery and remaining time; model the platform reports; input, cached, output, reasoning and total tokens; tool, schema and query call counts |
+| `steps` | output item | Order, kind (reasoning, tool discovery, tool call, message); start and duration; server, tool, arguments, the DAX, SQL or question sent; output size, hash and preview; tool status and error |
+| `evaluations` | attempt × evaluator | Evaluator, kind and category; score, pass flag, label, threshold, reason, per-criterion details; judge model and judge tokens (kept apart from agent tokens); Foundry eval run and item ids; human-review flag |
+
+Limits to keep in mind when analysing:
+
+- Token usage is reported once per response. The platform runs the model and tool loop server side, so there is no per-model-call breakdown unless Foundry traces supply one.
+- Thinking, tool and remaining time come from streamed events and are recorded only for streamed attempts. Tool time runs from the final arguments to the tool result. For arm 3 it includes the proxy hop and the data agent's own work, which cannot be separated.
+- The remaining time covers answer and argument generation, queueing and network, not just model compute.
+
 ## 8. Reporting
 
 - **Scorecard per arm:** correct rate overall and by tier and category; mean criteria pass rate; correct in all repeats; item recall on list answers. Core rows (including E01–E05) and risk rows are reported separately, and the risk set has its own pass rate and gate table. The headline uses the held-out split; all-row numbers sit beside it with dev rows marked.
