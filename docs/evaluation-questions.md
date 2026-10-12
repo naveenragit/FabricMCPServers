@@ -2,12 +2,12 @@
 
 **Created:** 2026-10-08. **Status:** reference answers computed live through the deployed MCP servers, then adversarially validated (section 5). All 50 of 50 questions were independently re-derived and agree with the answer key: 55 of 55 checks passed, run in the other engine or by a different method. 50 questions have agreeing SQL and DAX answers.
 
-This set extends the roughly 30-question plan in [foundry-evaluation-plan.md](foundry-evaluation-plan.md). The prompts are worded as a business user would ask them. To answer, an agent must plan, run one or more DAX or SQL queries through its MCP server, and combine the results. Every question is answerable from both data paths:
+This set feeds the [Foundry agent evaluation plan](foundry-agent-evaluation-plan.md); risk and behavior prompts are in [evaluation-risk-questions.md](evaluation-risk-questions.md). The prompts are worded as a business user would ask them. To answer, an agent must plan, run one or more DAX or SQL queries through its MCP server, and combine the results. Every question is answerable from both data paths:
 
 - the semantic model, through `execute_dax_query`
 - the lakehouse tables, through `execute_sql`
 
-Row counts match across both paths. Column-level differences are listed in section 2, item 11; no question depends on them.
+Row counts match across both paths. Column-level differences are listed in section 2, item 11; only the performance-return rounding affects any question (Q30, Q47), and the tolerance absorbs it.
 
 **Answer key:** [artifacts/evaluation/eval-questions.jsonl](../artifacts/evaluation/eval-questions.jsonl) and [answer-key.md](../artifacts/evaluation/answer-key.md). The `artifacts/` folder is gitignored, consistent with the plan's rule that answer keys stay out of the public repository. Each JSONL row contains:
 
@@ -66,7 +66,7 @@ These behaviors were verified live. They are why a semantic-model agent cannot s
     - **AUM net flows don't reconcile to transactions.** `fact_aum_daily.net_flow` does not match transaction-level contributions and withdrawals, so Q24, Q48, and Q50 name the AUM source explicitly.
     - **Amount is not quantity × price.** `amount` does not equal `quantity × price`.
     - **Probabilities aren't updated on close.** Opportunity probabilities are not updated when a deal closes; Won deals carry probabilities as low as 2%.
-11. **The semantic model's content differs from the lakehouse in 39 of 171 columns.** None of these columns is used by a question:
+11. **The semantic model's content differs from the lakehouse in 39 of 171 columns.** Apart from the performance returns, none of these columns is used by a question:
     - **Advisor attributes are blank in the model.** In both advisor tables, eight attributes have values in the lakehouse but are blank in the model: region, team, title, hire date, UPN, manager email, and the CFP and CFA flags. Q41 was changed from advisor region to the team-lead flag for this reason.
     - **Client attributes are blank in the model.** `dim_client.client_age_band` and `client_tenure_years` are blank in the model.
     - **Performance returns are rounded.** The model rounds performance returns to 4 decimals, against 6 in the lakehouse. Q30 and Q47 differ in the fifth significant digit; the return tolerance absorbs this.
@@ -166,7 +166,7 @@ These behaviors were verified live. They are why a semantic-model agent cannot s
 |---|---|---|
 | Live model vs catalog | `INFO.VIEW.MEASURES`, `INFO.VIEW.RELATIONSHIPS`, and `INFO.VIEW.TABLES` against the author catalog | All 53 measure expressions are identical. The 33 relationships match (28 active, 5 inactive), with no `fact_transaction`→`dim_date` relationship. `dim_date` is a Regular table, not a marked date table |
 | Data fidelity | Row counts and sums of every numeric fact column, in both engines | All match except performance returns, which the model rounds to 4 decimals |
-| Column fidelity | Blank and distinct counts for all 171 columns, in both engines | 39 columns differ (section 2, item 11); none is used by a question |
+| Column fidelity | Blank and distinct counts for all 171 columns, in both engines | 39 columns differ (section 2, item 11); only the performance returns are used (Q30, Q47), within tolerance |
 | Integrity | Nulls, orphan keys on 25 paths, snapshot-grain uniqueness, cadence, and accounting identities | Clean. Every cadence claim and identity in section 1 holds |
 | Re-derivation | 55 independent checks covering all 50 questions. Each used the other engine or a different method: dim_date joins instead of key ranges, TREATAS instead of USERELATIONSHIP, the secondary advisor dimension, raw iterators instead of measures, and window functions instead of TOP | 55/55 agree within tolerance |
 | Ranking robustness | Gap between the last included and first excluded item, for every top-N, highest, or lowest question | Every cutoff is strictly separated. Q32 has a three-way tie inside the top 5, but none at the cutoff |

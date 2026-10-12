@@ -15,7 +15,8 @@ Development workspace for a read-only MCP façade over a Power BI semantic model
 
 - **[semantic-model-mcp/README.md](semantic-model-mcp/README.md)** — implemented Python package, local preview, verification results and live-integration steps.
 - **[docs/implementation-plan.md](docs/implementation-plan.md)** — architecture, OSSIE/DAX compatibility, MCP tool contracts, naming, folder structure, authentication, phased backlog, and acceptance criteria.
-- **[docs/foundry-evaluation-plan.md](docs/foundry-evaluation-plan.md)** — three-arm Foundry agent evaluation through MCP: raw data, semantic model without measures, and semantic model with measures; selected quality metrics and token/tool-effort measurements.
+- **[docs/foundry-agent-evaluation-plan.md](docs/foundry-agent-evaluation-plan.md)** — Foundry agent evaluation plan: three agents (semantic model, lakehouse tables, Fabric data agent), evaluation criteria for agentic capability, response quality, and risk, and the phased delivery plan. Awaiting review. Supersedes [docs/foundry-evaluation-plan.md](docs/foundry-evaluation-plan.md).
+- **[docs/evaluation-risk-questions.md](docs/evaluation-risk-questions.md)** — 29 added risk and behavior prompts and the agent policy they test.
 - **[docs/model-assessment.md](docs/model-assessment.md)** — findings from the actual PBIX, including relationship, RLS, measure, report, and AI-metadata observations.
 - **[docs/adversarial-review.md](docs/adversarial-review.md)** — source-backed review findings, corrections, evidence checks, and unresolved implementation gates.
 - [scripts/inspect_pbix.py](scripts/inspect_pbix.py) — reproducible offline metadata-only inspection utility.

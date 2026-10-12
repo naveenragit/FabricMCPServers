@@ -1,5 +1,7 @@
 # Foundry evaluation plan: raw data vs. semantic context vs. predefined measures
 
+> **Superseded 2026-10-09** by [foundry-agent-evaluation-plan.md](foundry-agent-evaluation-plan.md). The experiment is now three agents over a semantic model, the lakehouse tables, and a Fabric data agent. The raw / measure-free / with-measures arms below are kept for history; the measure-free model was never built.
+
 **Updated:** 2026-09-18  
 **Status:** research-backed plan only; no agents, model copies, evaluators, datasets, or evaluation runs created.  
 **Decisions:** three agents run in Microsoft Foundry, each with only its corresponding dataset's MCP connection; no Code Interpreter, generic calculator, or other agent tools; scoring runs in the Foundry cloud evaluation framework.

@@ -5,6 +5,8 @@
 **/.pbi/localSettings.json
 **/.pbi/cache.abf
 artifacts/
+# Optimizer datasets carry ground-truth answers.
+evals/*.jsonl
 .tools/
 .venv/
 __pycache__/
