@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fabric-dataagent-mcp"
+version = "0.1.0"
+description = "Pass-through MCP proxy that lets Foundry call a Fabric data agent MCP endpoint as a service principal"
+license = "MIT"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "mcp==2.1.1",
+  "httpx2>=2.12,<3",
+  "pydantic>=2.12,<3",
+  "pydantic-settings>=2.5,<3",
+  "azure-identity>=1.19,<2",
+  # azure-identity's async credentials build an aiohttp pipeline; without it App Service fails at runtime.
+  "aiohttp>=3.9,<4",
+  "uvicorn>=0.31,<1",
+]
+
+[project.scripts]
+fabric-dataagent-mcp = "fabric_dataagent_mcp.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "pytest-asyncio>=1,<2", "ruff>=0.12,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fabric_dataagent_mcp"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
