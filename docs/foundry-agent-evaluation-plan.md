@@ -1,7 +1,7 @@
 # Foundry agent evaluation plan: three agents over Fabric data
 
 **Created:** 2026-10-09. **Updated:** 2026-10-12 (data agent confirmed; tool connection steps; fluency and coherence; adversarial review fixes; arm 3 through the data agent MCP endpoint as the signed-in user (service principal rejected, see D15); direct-call fallback removed).
-**Status:** Phase 0 has started for arm 3 only (2026-10-12): the proxy package `fabric-dataagent-mcp/`, `.env.example`, and a local `.env` exist, and nothing is deployed. No Foundry agents, connections, evaluators, datasets, or runs exist yet. The Fabric data agent exists but is not yet published, which its MCP endpoint requires.
+**Status:** Phase 0 is in progress. Arm 3: the proxy package `fabric-dataagent-mcp/` is built and tested but not deployed or reachable from Foundry. Arms 1 and 2: the Foundry project is verified, the project connections `wm-semantic-mcp` and `wm-onelake-mcp` and the agents `wm-dax-agent` and `wm-sql-agent` (version 1) exist, and arm 1 passes G2. Arm 2's data path is currently down (see Phase 0 findings). `wm-fabric-agent`, evaluators, datasets, and runs do not exist yet.
 **Supersedes:** [foundry-evaluation-plan.md](foundry-evaluation-plan.md), the earlier raw / measure-free / with-measures three-arm design.
 
 ## 1. Decisions
@@ -122,6 +122,14 @@ Phase 0 is in progress for arm 3: the proxy is built, tested, and answers correc
 - A service principal is not workable (D15). The data agent usually cannot read the semantic model as one: five of six answers were "data service unavailable", while the same question answered correctly for the signed-in user four times out of four. Calling the model directly as that service principal gives the same split: `executeQueries` is refused (401) and `executeDaxQueries` succeeds. The deployed model defines two security roles, and Microsoft documents `executeQueries` as unsupported for service principals on models with row-level security, so this is the likely cause.
 - **G3, first half, is met as the signed-in user.** The proxy, run locally over HTTP with the Azure CLI identity, listed its tool and answered both baseline questions (Q01 and Q10) correctly, in 19 and 23 seconds. The second half, a call from a Foundry evaluation run, needs the proxy reachable from Foundry and is not yet done.
 - A latency note for the plan: a single question takes about 13 to 26 seconds, so the 100-second Foundry cut-off is not close for simple questions.
+
+**Phase 0 findings (2026-10-12, Foundry project, arms 1 and 2).**
+
+- The agent model deployment `gpt-6-luna` exists in the project and answers through the Responses API. It accepts reasoning effort `none`, `low`, `medium`, `high`, `xhigh`, and `max`, and rejects `minimal`. Effort is pinned to `medium` in `.env`. The project has Application Insights connected.
+- **G2 passes for arm 1.** `wm-dax-agent` imported exactly its two allowed tools, called `get_semantic_model_schema` and then `execute_dax_query` with no approval request, and answered Q01 correctly in 19 s. One simple question used about 20,000 input tokens, mostly the compact schema.
+- **Observed stream order** matches the recorder's assumption: `mcp_list_tools` in progress and completed, then per call `output_item.added`, `mcp_call.in_progress`, `mcp_call_arguments.delta`, `mcp_call_arguments.done`, `mcp_call.completed`, `output_item.done`. The finished call item carries `name`, `arguments`, `output`, and `error`.
+- **Foundry aborts the whole response when an MCP tool returns an error result.** The stream raises an API error ("An error occurred invoking '<tool>'") and the model never sees the failure, so the agent cannot read the error and retry. Verified on arm 1 with a query for a nonexistent measure. Both of our servers mark rejected queries as errors, so any failed query ends the attempt. Consequences: query-revision and retry behavior cannot be measured while that holds, the recorder must record the stream error as a failed attempt, and a decision is needed on whether the servers should return errors as ordinary content so the agent can recover.
+- **Arm 2's data path is down.** All five lakehouse schemas under `Tables/EXTERNAL_*` are external data share shortcuts, and every table read fails with "underlying location does not exist", for both your user and the SQL server's managed identity. It worked on 2026-10-07. The cause is on the share's source side and is not yet established. `wm-sql-agent` was created and calls the right tool, but cannot return data until the shares resolve. This also affects the ground-truth SQL.
 
 ### Reference: connecting the tools to Foundry
 
