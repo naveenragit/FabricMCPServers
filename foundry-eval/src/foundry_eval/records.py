@@ -77,6 +77,9 @@ class RunRecord(_Record):
     n_completed: int = 0
     n_failed: int = 0
     n_infra_errors: int = 0
+    n_tool_errors: int = Field(
+        0, description="Attempts in which a tool returned an error, seen in the stream or in the Foundry trace"
+    )
     attempts_duration_s: float = Field(
         0.0, description="Sum of attempt durations; differs from wall time when attempts run concurrently"
     )
@@ -101,6 +104,13 @@ class AttemptRecord(_Record):
     infra_error: bool = Field(
         False, description="The platform failed, not the agent; exclude from quality comparisons"
     )
+    tool_error: bool = Field(
+        False,
+        description="A tool returned an error. Foundry aborts the whole response when that happens, "
+        "so the attempt has no answer and the agent could not retry",
+    )
+    tool_error_tool: str | None = Field(None, description="Name of the tool that returned the error")
+    tool_error_message: str | None = Field(None, description="The tool's error text, first line only")
 
     started_at: datetime
     ended_at: datetime
@@ -204,9 +214,34 @@ class EvaluationRecord(_Record):
     human_reviewed: bool = False
 
 
+class TraceRecord(_Record):
+    """What Foundry's own server-side trace (Application Insights) says about one attempt.
+
+    Joined after the run, because spans take minutes to appear. It is a cross-check on the stream:
+    the tool span reports success even when the call failed, so the agent span is the signal.
+    """
+
+    attempt_id: str
+    run_id: str
+    arm: Arm
+    response_id: str
+    trace_id: str = Field(description="Application Insights operation id for the whole invocation")
+    agent_span_success: bool | None = None
+    agent_result_code: str | None = None
+    error_type: str | None = Field(None, description="Foundry's error.type on the agent span, e.g. tool_user_error")
+    agent_span_s: float | None = Field(None, description="Server-side duration of the agent invocation")
+    tool_spans: int = 0
+    tool_names: list[str] = Field(default_factory=list)
+    tool_error: bool = Field(
+        False, description="The trace shows a tool error: error.type starts with tool, or a tool span failed"
+    )
+    fetched_at: datetime | None = None
+
+
 TABLES: dict[str, type[_Record]] = {
     "runs": RunRecord,
     "attempts": AttemptRecord,
     "steps": StepRecord,
     "evaluations": EvaluationRecord,
+    "traces": TraceRecord,
 }

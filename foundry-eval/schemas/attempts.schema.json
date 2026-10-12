@@ -114,6 +114,38 @@
       "title": "Infra Error",
       "type": "boolean"
     },
+    "tool_error": {
+      "default": false,
+      "description": "A tool returned an error. Foundry aborts the whole response when that happens, so the attempt has no answer and the agent could not retry",
+      "title": "Tool Error",
+      "type": "boolean"
+    },
+    "tool_error_tool": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the tool that returned the error",
+      "title": "Tool Error Tool"
+    },
+    "tool_error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The tool's error text, first line only",
+      "title": "Tool Error Message"
+    },
     "started_at": {
       "format": "date-time",
       "title": "Started At",

@@ -23,12 +23,14 @@ from .records import (
     RunRecord,
     RunStatus,
     StepRecord,
+    TraceRecord,
 )
 
 RUN_FILE = "run.json"
 ATTEMPTS_FILE = "attempts.jsonl"
 STEPS_FILE = "steps.jsonl"
 EVALUATIONS_FILE = "evaluations.jsonl"
+TRACES_FILE = "traces.jsonl"
 
 # Without these, schema_calls would silently stay 0 and every tool call would count as a query.
 DEFAULT_SCHEMA_TOOLS: dict[str, list[str]] = {
@@ -116,18 +118,43 @@ class RunStore:
     def attempts(self) -> list[AttemptRecord]:
         return _read(self.directory / ATTEMPTS_FILE, AttemptRecord)
 
-    def finish(self, status: RunStatus | None = None) -> RunRecord:
-        """Recomputes the roll-ups from the attempts on disk, so calling it again after re-runs is safe."""
+    def add_traces(self, traces: Iterable[TraceRecord]) -> None:
+        """Foundry trace findings; spans take minutes to appear, so this runs after the attempts."""
+        with self._lock:
+            _append(self.directory / TRACES_FILE, traces)
+
+    def traces(self) -> list[TraceRecord]:
+        return _read(self.directory / TRACES_FILE, TraceRecord)
+
+    def _rollup(self) -> list[AttemptRecord]:
         attempts = self.attempts()
         run = self.run
-        run.ended_at = datetime.now(UTC)
-        if self._started is not None:
-            run.wall_time_s = time.perf_counter() - self._started
         run.n_attempts = len(attempts)
         run.n_completed = sum(a.status == "completed" for a in attempts)
         run.n_failed = sum(a.status in ("failed", "timeout") for a in attempts)
         run.n_infra_errors = sum(a.infra_error for a in attempts)
+        # Files are append-only, so an attempt traced twice counts once, and the latest trace wins.
+        latest_trace = {t.attempt_id: t for t in self.traces()}
+        run.n_tool_errors = sum(
+            a.tool_error or (a.attempt_id in latest_trace and latest_trace[a.attempt_id].tool_error)
+            for a in attempts
+        )
         run.attempts_duration_s = sum(a.duration_s for a in attempts)
+        return attempts
+
+    def refresh_rollups(self) -> RunRecord:
+        """Update the counts after late data (traces) without touching the end time or status."""
+        self._rollup()
+        self._write_run()
+        return self.run
+
+    def finish(self, status: RunStatus | None = None) -> RunRecord:
+        """Recomputes the roll-ups from the attempts on disk, so calling it again after re-runs is safe."""
+        attempts = self._rollup()
+        run = self.run
+        run.ended_at = datetime.now(UTC)
+        if self._started is not None:
+            run.wall_time_s = time.perf_counter() - self._started
         if status:
             run.status = status
         elif not attempts or run.n_failed == len(attempts):

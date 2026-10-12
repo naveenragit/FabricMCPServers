@@ -300,6 +300,12 @@
       "title": "N Infra Errors",
       "type": "integer"
     },
+    "n_tool_errors": {
+      "default": 0,
+      "description": "Attempts in which a tool returned an error, seen in the stream or in the Foundry trace",
+      "title": "N Tool Errors",
+      "type": "integer"
+    },
     "attempts_duration_s": {
       "default": 0.0,
       "description": "Sum of attempt durations; differs from wall time when attempts run concurrently",

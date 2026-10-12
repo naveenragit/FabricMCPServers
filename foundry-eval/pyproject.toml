@@ -12,6 +12,7 @@ dependencies = ["pydantic>=2.12,<3"]
 
 [project.optional-dependencies]
 analysis = ["pandas>=2.2", "pyarrow>=15"]
+traces = ["requests>=2.32", "azure-identity>=1.19"]
 
 [dependency-groups]
 dev = ["pytest>=8,<9", "ruff>=0.12,<1"]

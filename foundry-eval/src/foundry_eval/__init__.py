@@ -5,6 +5,7 @@ from .records import (
     EvaluationRecord,
     RunRecord,
     StepRecord,
+    TraceRecord,
 )
 from .store import RunStore, new_run_id, write_json_schemas
 
@@ -16,6 +17,7 @@ __all__ = [
     "RunRecord",
     "RunStore",
     "StepRecord",
+    "TraceRecord",
     "new_run_id",
     "write_json_schemas",
 ]

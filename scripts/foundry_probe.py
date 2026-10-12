@@ -26,11 +26,12 @@ def load_env(path: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--effort", default=None)
+    parser.add_argument("--model", default=None, help="Deployment to call; defaults to FOUNDRY_AGENT_MODEL")
     args = parser.parse_args()
 
     load_env(Path(__file__).resolve().parents[1] / ".env")
     endpoint = os.environ["FOUNDRY_PROJECT_ENDPOINT"]
-    model = os.environ["FOUNDRY_AGENT_MODEL"]
+    model = args.model or os.environ["FOUNDRY_AGENT_MODEL"]
 
     project = AIProjectClient(endpoint=endpoint, credential=AzureCliCredential())
 

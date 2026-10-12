@@ -1,7 +1,7 @@
-"""Stream one question through each named agent and dump the raw event sequence (G2 smoke).
+"""Stream one question through each named agent and record it as a run (G2 smoke).
 
 Run: .\.venv\Scripts\python.exe scripts\foundry_smoke_agents.py wm-dax-agent [wm-sql-agent ...] [--q "question"]
-Raw events go to artifacts/foundry-smoke/<agent>.jsonl (gitignored).
+Records go to artifacts/runs/<run_id>/; raw events to artifacts/foundry-smoke/<agent>.jsonl (both gitignored).
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
 from azure.identity import AzureCliCredential
+from foundry_eval import RunStore
+from foundry_eval.agents import ARMS
 from openai import APIError
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,56 +29,61 @@ def load_env() -> None:
             os.environ.setdefault(key.strip(), value.strip())
 
 
-def show_completed(response: dict) -> None:
-    print("status:", response.get("status"), "usage:", response.get("usage"))
-    for item in response.get("output", []):
-        kind = item.get("type")
-        if kind == "mcp_call":
-            print(f"  mcp_call {item.get('name')} err={item.get('error')}")
-            print(f"    args: {str(item.get('arguments'))[:300]}")
-            print(f"    out:  {str(item.get('output'))[:300]}")
-        elif kind == "message":
-            text = "".join(c.get("text", "") for c in item.get("content", []))
-            print("  answer:", text[:800])
-        else:
-            print(f"  [{kind}]")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("agents", nargs="+")
     parser.add_argument("--q", default="How many clients do we have?")
+    parser.add_argument("--question-id", default="smoke")
     args = parser.parse_args()
 
     load_env()
     project = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential())
     client = project.get_openai_client()
-    out_dir = ROOT / "artifacts" / "foundry-smoke"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = ROOT / "artifacts" / "foundry-smoke"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    arm_by_agent = {arm.agent_name: arm for arm in ARMS.values()}
 
     for name in args.agents:
-        print(f"\n===== {name}: {args.q}")
-        started = time.monotonic()
-        stream = client.responses.create(
-            input=args.q,
-            stream=True,
-            extra_body={"agent_reference": {"name": name, "type": "agent_reference"}},
+        arm = arm_by_agent[name]
+        store = RunStore.create(
+            ROOT / "artifacts" / "runs",
+            arm=arm.key,
+            agent_name=name,
+            agent_model=os.environ.get("FOUNDRY_AGENT_MODEL"),
+            reasoning_effort=os.environ.get("FOUNDRY_AGENT_REASONING_EFFORT") or None,
+            judge_model=os.environ.get("FOUNDRY_JUDGE_MODEL") or None,
+            tools=[f"{arm.server_label}:{tool}" for tool in arm.allowed_tools],
+            dataset_name="smoke",
         )
-        order: list[str] = []
-        with (out_dir / f"{name}.jsonl").open("w", encoding="utf-8") as dump:
+        print(f"\n===== {name} run={store.run.run_id}: {args.q}")
+        recorder = store.recorder(question_id=args.question_id, question=args.q)
+        started = time.monotonic()
+        with (raw_dir / f"{name}.jsonl").open("w", encoding="utf-8") as dump:
             try:
+                stream = client.responses.create(
+                    input=args.q,
+                    stream=True,
+                    extra_body={"agent_reference": {"name": name, "type": "agent_reference"}},
+                )
                 for event in stream:
                     data = event.model_dump(mode="json")
                     data["_t"] = round(time.monotonic() - started, 3)
                     dump.write(json.dumps(data, default=str) + "\n")
-                    if not order or order[-1] != event.type:
-                        order.append(event.type)
-                    if event.type == "response.completed":
-                        show_completed(data["response"])
+                    recorder.on_event(data)
             except APIError as exc:
-                print(f"STREAM ERROR ({type(exc).__name__}): {str(exc)[:500]}")
-        print("events:", " > ".join(order))
-        print(f"elapsed: {time.monotonic() - started:.1f}s")
+                recorder.fail(exc)
+        attempt = store.add(recorder)
+        run = store.finish()
+
+        print(f"status={attempt.status} duration={attempt.duration_s:.1f}s tokens_in={attempt.input_tokens}")
+        print(f"tool_error={attempt.tool_error} tool={attempt.tool_error_tool} message={attempt.tool_error_message}")
+        print(f"tool_calls={attempt.tool_calls} failed={attempt.tool_calls_failed} response_id={attempt.response_id}")
+        for line in (store.directory / "steps.jsonl").read_text(encoding="utf-8").splitlines():
+            step = json.loads(line)
+            if step["kind"] == "tool_call":
+                print(f"  {step['tool_name']} status={step['tool_status']} query={str(step['query_text'])[:120]}")
+        print("answer:", (attempt.answer_text or "")[:500])
+        print(f"run: status={run.status} n_tool_errors={run.n_tool_errors}")
     return 0
 
 

@@ -1,0 +1,127 @@
+{
+  "additionalProperties": false,
+  "description": "What Foundry's own server-side trace (Application Insights) says about one attempt.\n\nJoined after the run, because spans take minutes to appear. It is a cross-check on the stream:\nthe tool span reports success even when the call failed, so the agent span is the signal.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "arm": {
+      "enum": [
+        "dax",
+        "sql",
+        "fabric"
+      ],
+      "title": "Arm",
+      "type": "string"
+    },
+    "response_id": {
+      "title": "Response Id",
+      "type": "string"
+    },
+    "trace_id": {
+      "description": "Application Insights operation id for the whole invocation",
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "agent_span_success": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Span Success"
+    },
+    "agent_result_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Result Code"
+    },
+    "error_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Foundry's error.type on the agent span, e.g. tool_user_error",
+      "title": "Error Type"
+    },
+    "agent_span_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Server-side duration of the agent invocation",
+      "title": "Agent Span S"
+    },
+    "tool_spans": {
+      "default": 0,
+      "title": "Tool Spans",
+      "type": "integer"
+    },
+    "tool_names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tool Names",
+      "type": "array"
+    },
+    "tool_error": {
+      "default": false,
+      "description": "The trace shows a tool error: error.type starts with tool, or a tool span failed",
+      "title": "Tool Error",
+      "type": "boolean"
+    },
+    "fetched_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fetched At"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "run_id",
+    "arm",
+    "response_id",
+    "trace_id"
+  ],
+  "title": "TraceRecord",
+  "type": "object"
+}

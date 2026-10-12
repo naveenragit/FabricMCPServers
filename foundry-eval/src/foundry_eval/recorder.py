@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from collections.abc import Callable, Iterable
@@ -19,7 +20,7 @@ from typing import Any
 
 from .records import Arm, AttemptRecord, AttemptStatus, StepKind, StepRecord, StepTimingBasis
 
-QUERY_KEYS = ("query", "dax", "sql", "userQuestion", "question")
+QUERY_KEYS = ("query", "dax_query", "dax", "sql", "userQuestion", "question")
 # Matched against exception type names and API error codes only, never free-text messages.
 _INFRA_HINTS = (
     "timeout",
@@ -40,8 +41,10 @@ _SPAN_END_EVENTS = frozenset(
     }
 )
 _HANDLED_EVENTS = _SPAN_END_EVENTS | {
+    "response.created",
     "response.output_item.added",
     "response.output_item.done",
+    "response.mcp_call_arguments.delta",
     "response.mcp_call_arguments.done",
     "response.mcp_call.in_progress",
     "response.mcp_list_tools.in_progress",
@@ -99,6 +102,15 @@ def _looks_infra(exc: BaseException) -> bool:
     if isinstance(status, int) and (status >= 500 or status == 429):
         return True
     return any(hint in type(exc).__name__.lower() for hint in _INFRA_HINTS)
+
+
+_TOOL_ERROR = re.compile(r"An error occurred invoking '([^']+)'\s*:?\s*(.*)")
+
+
+def _tool_error_from_message(message: str | None) -> tuple[str, str] | None:
+    """Foundry reports a failed MCP call as 'An error occurred invoking '<tool>': <error text>'."""
+    match = _TOOL_ERROR.search(message or "")
+    return (match.group(1), match.group(2).strip()) if match else None
 
 
 @dataclass
@@ -163,12 +175,15 @@ class AttemptRecorder:
         self._timings: dict[int, _Timing] = {}
         self._item_index: dict[str, int] = {}
         self._streamed_items: dict[int, dict[str, Any]] = {}
+        self._arg_deltas: dict[str, str] = {}
         self._first_event: float | None = None
         self._first_token: float | None = None
         self._t_end: float | None = None
         self._response: dict[str, Any] | None = None
+        self._created: dict[str, Any] = {}
         self._error: dict[str, Any] | None = None
         self._exception: tuple[str, str, bool, bool] | None = None
+        self._tool_error: tuple[str, str] | None = None
         self._streamed = False
 
     def _elapsed(self) -> float:
@@ -194,6 +209,10 @@ class AttemptRecorder:
         if kind not in _HANDLED_EVENTS:
             return
         data = _as_dict(event)
+        if kind == "response.created":
+            # Identifies the response even when the stream aborts before a final response arrives.
+            self._created = _as_dict(data.get("response")) or {}
+            return
         if kind in ("response.output_item.added", "response.output_item.done"):
             index = data.get("output_index")
             item = _as_dict(data.get("item"))
@@ -210,6 +229,10 @@ class AttemptRecorder:
         elif kind == "response.mcp_call_arguments.done":
             if timing := self._timing(data):
                 timing.args_done = t
+        elif kind == "response.mcp_call_arguments.delta":
+            # A call that fails never gets arguments.done, so the deltas are the only record of its query.
+            item_id = data.get("item_id") or ""
+            self._arg_deltas[item_id] = self._arg_deltas.get(item_id, "") + (data.get("delta") or "")
         elif kind in ("response.mcp_call.in_progress", "response.mcp_list_tools.in_progress"):
             if timing := self._timing(data):
                 timing.in_progress = t
@@ -228,14 +251,28 @@ class AttemptRecorder:
         self._t_end = self._elapsed() if elapsed_s is None else elapsed_s
 
     def fail(self, exc: BaseException, *, infra: bool | None = None) -> None:
-        """Record an exception raised while sending or reading the response."""
+        """Record an exception raised while sending or reading the response.
+
+        A tool error is not an infrastructure failure: Foundry raises it when an MCP tool returns an error
+        result, and ends the response without letting the model see it.
+        """
         timed_out = isinstance(exc, TimeoutError) or "timeout" in type(exc).__name__.lower()
-        self._exception = (
-            type(exc).__name__,
-            str(exc),
-            timed_out,
-            _looks_infra(exc) if infra is None else infra,
-        )
+        message = str(exc)
+        self._tool_error = _tool_error_from_message(message)
+        if infra is None:
+            infra = False if self._tool_error else _looks_infra(exc)
+        self._exception = (type(exc).__name__, message, timed_out, infra)
+        if self._t_end is None:
+            self._t_end = self._elapsed()
+
+    def _resolve_tool_error(self, response: dict[str, Any]) -> tuple[str, str] | None:
+        if self._tool_error:
+            return self._tool_error
+        err = response.get("error")
+        for message in ((self._error or {}).get("message"), err.get("message") if isinstance(err, dict) else None):
+            if found := _tool_error_from_message(message):
+                return found
+        return None
 
     def build(self) -> tuple[AttemptRecord, list[StepRecord]]:
         duration = self._t_end if self._t_end is not None else self._elapsed()
@@ -246,14 +283,36 @@ class AttemptRecorder:
         else:
             indexed = sorted(self._streamed_items.items())
         items = [_as_dict(item) for _, item in indexed]
+        tool_error = self._resolve_tool_error(response)
+        # The call that was running when the error arrived: the last one of that name with no output yet.
+        pending = [
+            pos
+            for pos, item in enumerate(items)
+            if tool_error
+            and item.get("type") == "mcp_call"
+            and item.get("name") == tool_error[0]
+            and item.get("output") is None
+        ]
+        failed_pos = pending[-1] if pending else None
         steps = [
-            self._step(pos, item, self._timings.get(idx, _Timing()))
+            self._step(
+                pos,
+                item,
+                self._timings.get(idx, _Timing()),
+                (*tool_error, duration) if pos == failed_pos and tool_error else None,
+            )
             for pos, ((idx, _), item) in enumerate(zip(indexed, items, strict=True))
         ]
         answer = "".join(self._message_text(i) for i in items if i.get("type") == "message") or None
-        return self._attempt(response, steps, duration, answer), steps
+        return self._attempt(response, steps, duration, answer, tool_error), steps
 
-    def _step(self, index: int, item: dict[str, Any], timing: _Timing) -> StepRecord:
+    def _step(
+        self,
+        index: int,
+        item: dict[str, Any],
+        timing: _Timing,
+        failure: tuple[str, str, float] | None = None,
+    ) -> StepRecord:
         item_type = item.get("type")
         kind: StepKind = {
             "reasoning": "reasoning",
@@ -272,6 +331,8 @@ class AttemptRecorder:
             else:
                 start, basis = timing.added, "item_span"
             end = timing.ended if timing.ended is not None else timing.done
+            if end is None and failure:
+                end = failure[2]
         elif kind == "tool_list":
             start = timing.in_progress if timing.in_progress is not None else timing.added
             end = timing.ended if timing.ended is not None else timing.done
@@ -294,7 +355,7 @@ class AttemptRecorder:
             timing_basis=basis,
         )
         if kind == "tool_call":
-            arguments = _as_text(item.get("arguments"))
+            arguments = _as_text(item.get("arguments")) or self._arg_deltas.get(item.get("id") or "")
             output = _as_text(item.get("output"))
             error = _error_text(item.get("error"))
             step.server_label = item.get("server_label")
@@ -304,6 +365,8 @@ class AttemptRecorder:
             step.query_text = _query_text(arguments)
             step.tool_status = item.get("status")
             step.tool_error = error
+            if failure:
+                step.tool_status, step.tool_error = "failed", failure[1]
             if output is not None:
                 step.output_chars = len(output)
                 step.output_sha256 = hashlib.sha256(output.encode()).hexdigest()
@@ -326,9 +389,18 @@ class AttemptRecorder:
         )
 
     def _attempt(
-        self, response: dict[str, Any], steps: list[StepRecord], duration: float, answer: str | None
+        self,
+        response: dict[str, Any],
+        steps: list[StepRecord],
+        duration: float,
+        answer: str | None,
+        tool_error: tuple[str, str] | None,
     ) -> AttemptRecord:
         calls = [s for s in steps if s.kind == "tool_call"]
+        failed_calls = [s for s in calls if s.tool_error or s.tool_status == "failed"]
+        if tool_error is None and failed_calls:
+            first = failed_calls[0]
+            tool_error = (first.tool_name or "", (first.tool_error or "").splitlines()[0] if first.tool_error else "")
         timed = self._streamed and any(s.timing_basis != "none" for s in steps)
         tool_time = _busy_time(calls)
         list_time = _busy_time(s for s in steps if s.kind == "tool_list")
@@ -355,10 +427,11 @@ class AttemptRecorder:
             err = response.get("error") or self._error or {}
             error_type = err.get("code") or (api_status or "no_final_response")
             error_message = err.get("message")
-            infra = any(h in str(error_type).lower() for h in _INFRA_HINTS)
+            infra = any(h in str(error_type).lower() for h in _INFRA_HINTS) and not tool_error
 
-        agent = response.get("agent") or {}
-        conversation = response.get("conversation")
+        meta = response or self._created
+        agent = meta.get("agent") or {}
+        conversation = meta.get("conversation")
         return AttemptRecord(
             attempt_id=self.attempt_id,
             run_id=self._run_id,
@@ -373,6 +446,9 @@ class AttemptRecorder:
             error_message=error_message,
             incomplete_reason=incomplete_reason,
             infra_error=infra,
+            tool_error=tool_error is not None,
+            tool_error_tool=tool_error[0] if tool_error else None,
+            tool_error_message=tool_error[1] or None if tool_error else None,
             started_at=self._started_at,
             ended_at=self._started_at + timedelta(seconds=duration),
             duration_s=duration,
@@ -383,9 +459,9 @@ class AttemptRecorder:
             tool_time_s=tool_time if timed else None,
             tool_list_time_s=list_time if timed else None,
             model_other_s=max(0.0, duration - accounted) if timed else None,
-            response_id=response.get("id"),
+            response_id=meta.get("id"),
             conversation_id=conversation.get("id") if isinstance(conversation, dict) else conversation,
-            model=response.get("model"),
+            model=meta.get("model"),
             agent_name=agent.get("name") if isinstance(agent, dict) else None,
             agent_version=agent.get("version") if isinstance(agent, dict) else None,
             input_tokens=usage.get("input_tokens"),
@@ -395,7 +471,7 @@ class AttemptRecorder:
             reasoning_tokens=out_details.get("reasoning_tokens"),
             total_tokens=usage.get("total_tokens"),
             tool_calls=len(calls),
-            tool_calls_failed=sum(1 for s in calls if s.tool_error or s.tool_status == "failed"),
+            tool_calls_failed=len(failed_calls),
             tool_list_calls=sum(1 for s in steps if s.kind == "tool_list"),
             schema_calls=sum(1 for s in calls if s.is_schema_call),
             query_calls=sum(1 for s in calls if not s.is_schema_call),

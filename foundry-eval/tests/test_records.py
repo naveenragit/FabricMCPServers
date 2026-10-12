@@ -287,7 +287,7 @@ def test_store_roundtrip_evaluations_and_wide_table(tmp_path):
     )
 
     tables = load_tables(tmp_path, run_ids=[run.run_id])
-    assert set(tables) == {"runs", "attempts", "steps", "evaluations"}
+    assert set(tables) == {"runs", "attempts", "steps", "evaluations", "traces"}
     assert str(tables["attempts"]["started_at"].dtype).startswith("datetime64")
     assert len(tables["attempts"]) == 2 and len(tables["steps"]) == 2 and len(tables["evaluations"]) == 1
     wide = wide_attempts(tables)
@@ -299,7 +299,7 @@ def test_store_roundtrip_evaluations_and_wide_table(tmp_path):
 def test_schema_files_cover_every_table_and_match_the_committed_copies(tmp_path):
     paths = write_json_schemas(tmp_path)
     assert {p.name for p in paths} == {
-        f"{n}.schema.json" for n in ("runs", "attempts", "steps", "evaluations")
+        f"{n}.schema.json" for n in ("runs", "attempts", "steps", "evaluations", "traces")
     }
     committed = Path(__file__).parents[1] / "schemas"
     for path in paths:
