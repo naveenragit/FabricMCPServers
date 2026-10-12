@@ -71,20 +71,14 @@ class RunRecord(_Record):
         default_factory=dict, description="Free-form: region, capacity SKU and state, cache warm or cold"
     )
 
-    # Roll-ups, filled in by RunStore.finish()
+    # Roll-ups, filled in by RunStore.finish(); token and time totals are left to analysis so a
+    # missing usage value cannot silently undercount them.
     n_attempts: int = 0
     n_completed: int = 0
     n_failed: int = 0
     n_infra_errors: int = 0
-    input_tokens: int = 0
-    cached_input_tokens: int = 0
-    output_tokens: int = 0
-    reasoning_tokens: int = 0
-    total_tokens: int = 0
-    tool_time_s: float = 0.0
-    reasoning_time_s: float = 0.0
     attempts_duration_s: float = Field(
-        0.0, description="Sum of attempt durations (differs from wall time when concurrent)"
+        0.0, description="Sum of attempt durations; differs from wall time when attempts run concurrently"
     )
 
 
@@ -96,6 +90,7 @@ class AttemptRecord(_Record):
     arm: Arm
     question_id: str
     repeat_index: int = 0
+    retry_of: str | None = Field(None, description="attempt_id of the platform-failed attempt this re-runs")
     question: str
     answer_text: str | None = None
 
@@ -114,7 +109,9 @@ class AttemptRecord(_Record):
     time_to_first_event_s: float | None = None
     time_to_first_token_s: float | None = None
     reasoning_time_s: float | None = Field(None, description="Model thinking, from reasoning item spans")
-    tool_time_s: float | None = Field(None, description="MCP tool calls, arguments final to result")
+    tool_time_s: float | None = Field(
+        None, description="Wall time with an MCP tool call running; parallel calls count once"
+    )
     tool_list_time_s: float | None = Field(None, description="MCP tool discovery")
     model_other_s: float | None = Field(
         None, description="Remainder: answer and argument generation, queueing, network"
@@ -127,10 +124,10 @@ class AttemptRecord(_Record):
     agent_version: str | None = None
 
     input_tokens: int | None = None
-    cached_input_tokens: int | None = None
+    cached_input_tokens: int | None = Field(None, description="Part of input_tokens")
     cache_write_tokens: int | None = None
     output_tokens: int | None = Field(None, description="Includes reasoning tokens")
-    reasoning_tokens: int | None = None
+    reasoning_tokens: int | None = Field(None, description="Part of output_tokens")
     total_tokens: int | None = None
 
     tool_calls: int = 0

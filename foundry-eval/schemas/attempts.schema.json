@@ -33,6 +33,19 @@
       "title": "Repeat Index",
       "type": "integer"
     },
+    "retry_of": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "attempt_id of the platform-failed attempt this re-runs",
+      "title": "Retry Of"
+    },
     "question": {
       "title": "Question",
       "type": "string"
@@ -171,7 +184,7 @@
         }
       ],
       "default": null,
-      "description": "MCP tool calls, arguments final to result",
+      "description": "Wall time with an MCP tool call running; parallel calls count once",
       "title": "Tool Time S"
     },
     "tool_list_time_s": {
@@ -283,6 +296,7 @@
         }
       ],
       "default": null,
+      "description": "Part of input_tokens",
       "title": "Cached Input Tokens"
     },
     "cache_write_tokens": {
@@ -320,6 +334,7 @@
         }
       ],
       "default": null,
+      "description": "Part of output_tokens",
       "title": "Reasoning Tokens"
     },
     "total_tokens": {

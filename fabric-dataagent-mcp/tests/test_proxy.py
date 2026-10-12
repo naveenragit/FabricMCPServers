@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -81,6 +82,23 @@ async def test_question_and_answer_pass_through_unchanged(monkeypatch: pytest.Mo
     question = "  How many clients do we have?  "
     assert await backend.ask(question) == "exactly this\nanswer"
     assert seen == [{"userQuestion": question}]
+
+
+async def test_token_is_cached_until_near_expiry() -> None:
+    calls: list[float] = []
+
+    class CountingCredential:
+        async def get_token(self, scope: str) -> Any:
+            calls.append(time.time())
+            return SimpleNamespace(token="t", expires_on=time.time() + (3600 if len(calls) == 1 else 60))
+
+    backend = DataAgentBackend(make_settings(), credential=CountingCredential())
+    await backend.token()
+    await backend.token()
+    assert len(calls) == 1
+    backend._token.expires_on = time.time() + 60  # inside the refresh margin
+    await backend.token()
+    assert len(calls) == 2
 
 
 async def test_upstream_error_becomes_backend_error(monkeypatch: pytest.MonkeyPatch) -> None:

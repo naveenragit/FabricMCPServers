@@ -17,6 +17,7 @@ from .settings import Settings
 log = logging.getLogger("fabric_dataagent_mcp")
 
 _MAX_UPSTREAM_ERROR_CHARS = 2000
+_TOKEN_REFRESH_MARGIN_S = 300
 
 
 class BackendError(Exception):
@@ -60,15 +61,19 @@ class DataAgentBackend:
             )
         # The data agent advertises one tool; its name and question argument are discovered, not assumed.
         self._tool: tuple[str, str] | None = None
+        self._token: Any = None
 
     async def close(self) -> None:
         await self._credential.close()
 
     async def token(self) -> Any:
-        try:
-            return await self._credential.get_token(self.settings.token_scope)
-        except Exception as error:
-            raise BackendError(f"Backend sign-in failed ({type(error).__name__})") from None
+        # AzureCliCredential does not cache: each call runs `az` (about 2 s), which would inflate every measured answer.
+        if self._token is None or getattr(self._token, "expires_on", 0) - time.time() < _TOKEN_REFRESH_MARGIN_S:
+            try:
+                self._token = await self._credential.get_token(self.settings.token_scope)
+            except Exception as error:
+                raise BackendError(f"Backend sign-in failed ({type(error).__name__})") from None
+        return self._token
 
     def _client(self, bearer: str) -> Client:
         timeout = httpx2.Timeout(30.0, read=float(self.settings.timeout_seconds))

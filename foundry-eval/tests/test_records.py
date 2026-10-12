@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
@@ -151,6 +152,46 @@ class FakeResponse(BaseModel):
     output: list[dict]
 
 
+def test_parallel_tool_calls_are_not_double_counted():
+    clock = Clock()
+    rec = AttemptRecorder(run_id="r1", arm="dax", question_id="q", question="?", clock=clock)
+    final = {"status": "completed", "output": [CALL_OK, {**CALL_OK, "id": "mc9"}]}
+    for index, call_id in enumerate(("mc1", "mc9")):
+        clock.t = 1.0
+        rec.on_event(
+            ev("response.output_item.added", output_index=index, item={"type": "mcp_call", "id": call_id})
+        )
+        clock.t = 2.0
+        rec.on_event(ev("response.mcp_call_arguments.done", output_index=index, item_id=call_id))
+        clock.t = 10.0
+        rec.on_event(ev("response.mcp_call.completed", output_index=index, item_id=call_id))
+    clock.t = 11.0
+    rec.on_event(ev("response.completed", response=final))
+    attempt, steps = rec.build()
+
+    assert [s.duration_s for s in steps] == [8.0, 8.0]
+    assert attempt.tool_time_s == pytest.approx(8.0)
+    assert attempt.model_other_s == pytest.approx(3.0)
+
+
+def test_malformed_and_unrelated_events_are_ignored():
+    rec = AttemptRecorder(run_id="r1", arm="dax", question_id="q", question="?")
+    rec.on_event(ev("response.output_item.added", item={"type": "message"}))
+    rec.on_event(ev("response.reasoning_summary_text.delta", delta="x"))
+    rec.on_event(ev("ping"))
+    attempt, steps = rec.build()
+    assert steps == [] and attempt.status == "failed" and attempt.error_type == "no_final_response"
+    with pytest.raises(TypeError):
+        rec.record_response(object())
+
+
+def test_retry_is_linked_and_message_text_alone_does_not_mark_infra():
+    rec = AttemptRecorder(run_id="r1", arm="sql", question_id="q", question="?", retry_of="abc")
+    rec.fail(ValueError("connection string is malformed"))
+    attempt, _ = rec.build()
+    assert attempt.retry_of == "abc" and attempt.infra_error is False
+
+
 def test_non_streaming_records_totals_only_and_accepts_sdk_style_models():
     rec = AttemptRecorder(run_id="r1", arm="sql", question_id="q02", question="?")
     rec.record_response(
@@ -202,9 +243,7 @@ def test_failed_response_exception_and_infra_classification():
 
 
 def test_store_roundtrip_evaluations_and_wide_table(tmp_path):
-    store = RunStore.create(
-        tmp_path, arm="dax", agent_model="gpt-5", schema_tools=["get_semantic_model_schema"]
-    )
+    store = RunStore.create(tmp_path, arm="dax", agent_model="gpt-5")
 
     ok = store.recorder(question_id="q01", question="How many clients?")
     ok.record_response(
@@ -223,7 +262,8 @@ def test_store_roundtrip_evaluations_and_wide_table(tmp_path):
         1,
         1,
     )
-    assert run.total_tokens == 12900 and run.wall_time_s is not None and run.wall_time_s >= 0
+    assert run.wall_time_s is not None and run.wall_time_s >= 0
+    assert RunStore.create(tmp_path, arm="sql").run.schema_tools == ["get_database_schema"]
 
     reopened = RunStore.open(tmp_path, run.run_id)
     attempt = reopened.attempts()[0]
@@ -246,8 +286,9 @@ def test_store_roundtrip_evaluations_and_wide_table(tmp_path):
         ]
     )
 
-    tables = load_tables(tmp_path)
+    tables = load_tables(tmp_path, run_ids=[run.run_id])
     assert set(tables) == {"runs", "attempts", "steps", "evaluations"}
+    assert str(tables["attempts"]["started_at"].dtype).startswith("datetime64")
     assert len(tables["attempts"]) == 2 and len(tables["steps"]) == 2 and len(tables["evaluations"]) == 1
     wide = wide_attempts(tables)
     row = wide[wide["question_id"] == "q01"].iloc[0]
@@ -255,6 +296,13 @@ def test_store_roundtrip_evaluations_and_wide_table(tmp_path):
     assert wide[wide["question_id"] == "q02"]["score__numeric_audit"].isna().all()
 
 
-def test_schema_files_cover_every_table(tmp_path):
-    names = {p.name for p in write_json_schemas(tmp_path)}
-    assert names == {f"{n}.schema.json" for n in ("runs", "attempts", "steps", "evaluations")}
+def test_schema_files_cover_every_table_and_match_the_committed_copies(tmp_path):
+    paths = write_json_schemas(tmp_path)
+    assert {p.name for p in paths} == {
+        f"{n}.schema.json" for n in ("runs", "attempts", "steps", "evaluations")
+    }
+    committed = Path(__file__).parents[1] / "schemas"
+    for path in paths:
+        assert (committed / path.name).read_text(encoding="utf-8") == path.read_text(encoding="utf-8"), (
+            "schema drift: run `python -m foundry_eval schemas foundry-eval/schemas`"
+        )

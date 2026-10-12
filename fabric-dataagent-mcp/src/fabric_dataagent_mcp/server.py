@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from mcp import MCPError
@@ -26,6 +27,8 @@ from .backend import BackendError, DataAgentBackend
 from .settings import Settings
 
 _NOTICE = "Restricted POC; all callers share one backend identity. "
+
+log = logging.getLogger("fabric_dataagent_mcp")
 
 TOOL = Tool(
     name="ask_fabric_data_agent",
@@ -65,8 +68,10 @@ class Application:
             # The question goes upstream as received and the answer comes back as received.
             return text_result(await self.backend.ask(question))
         except BackendError as error:
+            log.warning("tool call failed: %s", error)
             return text_result(str(error), error=True)
         except Exception:
+            log.exception("unexpected failure in tool call")
             return text_result("Operation failed; no upstream details were exposed.", error=True)
 
     def server(self) -> Server[Any]:

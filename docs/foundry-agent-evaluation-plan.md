@@ -411,15 +411,15 @@ The harness package `foundry-eval/` writes each arm's run to `artifacts/runs/<ru
 
 | Table | One row per | Holds |
 |---|---|---|
-| `runs` | arm execution | Total wall time of the arm's agent code; agent, version, model deployment, reasoning effort, judge model, instruction hash, tools; dataset hash and split; git SHA; environment notes; roll-ups of tokens, time and failures |
-| `attempts` | question × repeat | Question and answer; status and infrastructure-error flag; duration, time to first token; thinking, tool, tool-discovery and remaining time; model the platform reports; input, cached, output, reasoning and total tokens; tool, schema and query call counts |
+| `runs` | arm execution | Total wall time of the arm's agent code; agent, version, model deployment, reasoning effort, judge model, instruction hash, tools; dataset hash and split; git SHA; environment notes; counts of attempts, failures and infrastructure errors. Token and time totals are computed from `attempts`, not stored |
+| `attempts` | question × repeat | Question and answer; status and infrastructure-error flag; the attempt a re-run replaces; duration, time to first token; thinking, tool, tool-discovery and remaining time; model the platform reports; input, cached, output, reasoning and total tokens; tool, schema and query call counts |
 | `steps` | output item | Order, kind (reasoning, tool discovery, tool call, message); start and duration; server, tool, arguments, the DAX, SQL or question sent; output size, hash and preview; tool status and error |
 | `evaluations` | attempt × evaluator | Evaluator, kind and category; score, pass flag, label, threshold, reason, per-criterion details; judge model and judge tokens (kept apart from agent tokens); Foundry eval run and item ids; human-review flag |
 
 Limits to keep in mind when analysing:
 
 - Token usage is reported once per response. The platform runs the model and tool loop server side, so there is no per-model-call breakdown unless Foundry traces supply one.
-- Thinking, tool and remaining time come from streamed events and are recorded only for streamed attempts. Tool time runs from the final arguments to the tool result. For arm 3 it includes the proxy hop and the data agent's own work, which cannot be separated.
+- Thinking, tool and remaining time come from streamed events and are recorded only for streamed attempts. Tool time runs from the final arguments to the tool result, and parallel calls count once. For arm 3 it includes the proxy hop and the data agent's own work, which cannot be separated.
 - The remaining time covers answer and argument generation, queueing and network, not just model compute.
 
 ## 8. Reporting

@@ -300,44 +300,9 @@
       "title": "N Infra Errors",
       "type": "integer"
     },
-    "input_tokens": {
-      "default": 0,
-      "title": "Input Tokens",
-      "type": "integer"
-    },
-    "cached_input_tokens": {
-      "default": 0,
-      "title": "Cached Input Tokens",
-      "type": "integer"
-    },
-    "output_tokens": {
-      "default": 0,
-      "title": "Output Tokens",
-      "type": "integer"
-    },
-    "reasoning_tokens": {
-      "default": 0,
-      "title": "Reasoning Tokens",
-      "type": "integer"
-    },
-    "total_tokens": {
-      "default": 0,
-      "title": "Total Tokens",
-      "type": "integer"
-    },
-    "tool_time_s": {
-      "default": 0.0,
-      "title": "Tool Time S",
-      "type": "number"
-    },
-    "reasoning_time_s": {
-      "default": 0.0,
-      "title": "Reasoning Time S",
-      "type": "number"
-    },
     "attempts_duration_s": {
       "default": 0.0,
-      "description": "Sum of attempt durations (differs from wall time when concurrent)",
+      "description": "Sum of attempt durations; differs from wall time when attempts run concurrently",
       "title": "Attempts Duration S",
       "type": "number"
     }

@@ -29,17 +29,24 @@ def load_tables(root: Path | str, run_ids: list[str] | None = None) -> dict[str,
         rows["attempts"] += _jsonl(directory / ATTEMPTS_FILE)
         rows["steps"] += _jsonl(directory / STEPS_FILE)
         rows["evaluations"] += _jsonl(directory / EVALUATIONS_FILE)
-    return {
-        name: pd.DataFrame(rows[name], columns=list(model.model_fields)) for name, model in TABLES.items()
-    }
+    frames = {}
+    for name, model in TABLES.items():
+        frame = pd.DataFrame(rows[name], columns=list(model.model_fields))
+        for column in frame.columns[frame.columns.str.endswith("_at")]:
+            frame[column] = pd.to_datetime(frame[column], utc=True)
+        frames[name] = frame
+    return frames
 
 
 def wide_attempts(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """One row per attempt with `score__<evaluator>` and `passed__<evaluator>` columns appended."""
+    """One row per attempt with `score__<evaluator>` and `passed__<evaluator>` columns appended.
+
+    Files are append-only, so when an attempt was evaluated more than once the last row (latest) wins.
+    """
     attempts, evaluations = tables["attempts"], tables["evaluations"]
     scored = evaluations[evaluations["status"] == "ok"]
     frames = [attempts.set_index("attempt_id")]
     for value in ("score", "passed"):
-        pivot = scored.pivot_table(index="attempt_id", columns="evaluator", values=value, aggfunc="first")
+        pivot = scored.pivot_table(index="attempt_id", columns="evaluator", values=value, aggfunc="last")
         frames.append(pivot.add_prefix(f"{value}__"))
     return pd.concat(frames, axis=1).reset_index()

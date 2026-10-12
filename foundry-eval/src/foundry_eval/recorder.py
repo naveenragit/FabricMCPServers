@@ -14,15 +14,16 @@ import time
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .records import Arm, AttemptRecord, AttemptStatus, StepKind, StepRecord, StepTimingBasis
 
 QUERY_KEYS = ("query", "dax", "sql", "userQuestion", "question")
+# Matched against exception type names and API error codes only, never free-text messages.
 _INFRA_HINTS = (
     "timeout",
-    "connection",
+    "connect",
     "ratelimit",
     "rate_limit",
     "server_error",
@@ -30,15 +31,34 @@ _INFRA_HINTS = (
     "unavailable",
 )
 
+_SPAN_END_EVENTS = frozenset(
+    {
+        "response.mcp_call.completed",
+        "response.mcp_call.failed",
+        "response.mcp_list_tools.completed",
+        "response.mcp_list_tools.failed",
+    }
+)
+_HANDLED_EVENTS = _SPAN_END_EVENTS | {
+    "response.output_item.added",
+    "response.output_item.done",
+    "response.mcp_call_arguments.done",
+    "response.mcp_call.in_progress",
+    "response.mcp_list_tools.in_progress",
+    "response.completed",
+    "response.incomplete",
+    "response.failed",
+    "error",
+}
+
 
 def _as_dict(obj: Any) -> Any:
-    if obj is None or isinstance(obj, str | int | float | bool | dict | list):
+    if obj is None or isinstance(obj, dict):
         return obj
-    for name in ("model_dump", "to_dict"):
-        fn = getattr(obj, name, None)
-        if callable(fn):
-            return fn(mode="json") if name == "model_dump" else fn()
-    return vars(obj)
+    dump = getattr(obj, "model_dump", None)
+    if callable(dump):
+        return dump(mode="json")
+    raise TypeError(f"Expected a dict or a pydantic model, got {type(obj).__name__}")
 
 
 def _event_type(event: Any) -> str:
@@ -78,8 +98,7 @@ def _looks_infra(exc: BaseException) -> bool:
     status = getattr(exc, "status_code", None)
     if isinstance(status, int) and (status >= 500 or status == 429):
         return True
-    label = f"{type(exc).__name__} {exc}".lower()
-    return any(hint in label for hint in _INFRA_HINTS)
+    return any(hint in type(exc).__name__.lower() for hint in _INFRA_HINTS)
 
 
 @dataclass
@@ -97,6 +116,24 @@ def _span(start: float | None, end: float | None) -> float | None:
     return max(0.0, end - start)
 
 
+def _busy_time(steps: Iterable[StepRecord]) -> float:
+    """Wall-clock time covered by the steps; overlapping parallel calls count once."""
+    spans = sorted(
+        (s.start_s, s.start_s + s.duration_s)
+        for s in steps
+        if s.start_s is not None and s.duration_s is not None
+    )
+    total, covered_to = 0.0, None
+    for start, end in spans:
+        if covered_to is None or start > covered_to:
+            total += end - start
+            covered_to = end
+        elif end > covered_to:
+            total += end - covered_to
+            covered_to = end
+    return total
+
+
 class AttemptRecorder:
     """Create it just before sending the request so the clock covers submission latency."""
 
@@ -108,6 +145,7 @@ class AttemptRecorder:
         question_id: str,
         question: str,
         repeat_index: int = 0,
+        retry_of: str | None = None,
         schema_tools: Iterable[str] = (),
         preview_chars: int = 2000,
         clock: Callable[[], float] = time.perf_counter,
@@ -116,6 +154,7 @@ class AttemptRecorder:
         self.attempt_id = uuid.uuid4().hex
         self._run_id, self._arm = run_id, arm
         self._question_id, self._question, self._repeat = question_id, question, repeat_index
+        self._retry_of = retry_of
         self._schema_tools = frozenset(schema_tools)
         self._preview = preview_chars
         self._clock, self._now = clock, now
@@ -152,12 +191,14 @@ class AttemptRecorder:
             if self._first_token is None:
                 self._first_token = t
             return
-        if not kind.startswith(("response.", "error")):
+        if kind not in _HANDLED_EVENTS:
             return
         data = _as_dict(event)
         if kind in ("response.output_item.added", "response.output_item.done"):
-            index = data["output_index"]
-            item = _as_dict(data["item"])
+            index = data.get("output_index")
+            item = _as_dict(data.get("item"))
+            if index is None or not item:
+                return
             timing = self._timings.setdefault(index, _Timing())
             self._streamed_items[index] = item
             if item.get("id"):
@@ -172,12 +213,7 @@ class AttemptRecorder:
         elif kind in ("response.mcp_call.in_progress", "response.mcp_list_tools.in_progress"):
             if timing := self._timing(data):
                 timing.in_progress = t
-        elif kind in (
-            "response.mcp_call.completed",
-            "response.mcp_call.failed",
-            "response.mcp_list_tools.completed",
-            "response.mcp_list_tools.failed",
-        ):
+        elif kind in _SPAN_END_EVENTS:
             if timing := self._timing(data):
                 timing.ended = t
         elif kind in ("response.completed", "response.incomplete", "response.failed"):
@@ -186,10 +222,10 @@ class AttemptRecorder:
         elif kind == "error":
             self._error = {"code": data.get("code"), "message": data.get("message")}
 
-    def record_response(self, response: Any, *, elapsed_s: float) -> None:
-        """Non-streaming path: totals only, no step timing."""
+    def record_response(self, response: Any, *, elapsed_s: float | None = None) -> None:
+        """Non-streaming path: totals only, no step timing. Elapsed time is measured unless given."""
         self._response = _as_dict(response)
-        self._t_end = elapsed_s
+        self._t_end = self._elapsed() if elapsed_s is None else elapsed_s
 
     def fail(self, exc: BaseException, *, infra: bool | None = None) -> None:
         """Record an exception raised while sending or reading the response."""
@@ -294,9 +330,10 @@ class AttemptRecorder:
     ) -> AttemptRecord:
         calls = [s for s in steps if s.kind == "tool_call"]
         timed = self._streamed and any(s.timing_basis != "none" for s in steps)
-        tool_time = sum(s.duration_s or 0.0 for s in calls)
-        list_time = sum(s.duration_s or 0.0 for s in steps if s.kind == "tool_list")
-        think_time = sum(s.duration_s or 0.0 for s in steps if s.kind == "reasoning")
+        tool_time = _busy_time(calls)
+        list_time = _busy_time(s for s in steps if s.kind == "tool_list")
+        think_time = _busy_time(s for s in steps if s.kind == "reasoning")
+        accounted = _busy_time(s for s in steps if s.kind in ("tool_call", "tool_list", "reasoning"))
         usage = response.get("usage") or {}
         in_details = usage.get("input_tokens_details") or {}
         out_details = usage.get("output_tokens_details") or {}
@@ -328,6 +365,7 @@ class AttemptRecorder:
             arm=self._arm,
             question_id=self._question_id,
             repeat_index=self._repeat,
+            retry_of=self._retry_of,
             question=self._question,
             answer_text=answer,
             status=status,
@@ -336,7 +374,7 @@ class AttemptRecorder:
             incomplete_reason=incomplete_reason,
             infra_error=infra,
             started_at=self._started_at,
-            ended_at=self._now(),
+            ended_at=self._started_at + timedelta(seconds=duration),
             duration_s=duration,
             timing_basis="stream" if timed else "total_only",
             time_to_first_event_s=self._first_event,
@@ -344,7 +382,7 @@ class AttemptRecorder:
             reasoning_time_s=think_time if timed else None,
             tool_time_s=tool_time if timed else None,
             tool_list_time_s=list_time if timed else None,
-            model_other_s=max(0.0, duration - tool_time - list_time - think_time) if timed else None,
+            model_other_s=max(0.0, duration - accounted) if timed else None,
             response_id=response.get("id"),
             conversation_id=conversation.get("id") if isinstance(conversation, dict) else conversation,
             model=response.get("model"),

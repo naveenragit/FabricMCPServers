@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import uuid
 from collections.abc import Iterable
@@ -14,12 +15,27 @@ from typing import Any
 from pydantic import BaseModel
 
 from .recorder import AttemptRecorder
-from .records import Arm, AttemptRecord, EvaluationRecord, RunRecord, StepRecord
+from .records import (
+    TABLES,
+    Arm,
+    AttemptRecord,
+    EvaluationRecord,
+    RunRecord,
+    RunStatus,
+    StepRecord,
+)
 
 RUN_FILE = "run.json"
 ATTEMPTS_FILE = "attempts.jsonl"
 STEPS_FILE = "steps.jsonl"
 EVALUATIONS_FILE = "evaluations.jsonl"
+
+# Without these, schema_calls would silently stay 0 and every tool call would count as a query.
+DEFAULT_SCHEMA_TOOLS: dict[str, list[str]] = {
+    "dax": ["get_semantic_model_schema"],
+    "sql": ["get_database_schema"],
+    "fabric": [],
+}
 
 
 def new_run_id(arm: str) -> str:
@@ -45,9 +61,11 @@ class RunStore:
         self.directory = directory
         self.run = run
         self._started = started
+        self._lock = threading.Lock()
 
     @classmethod
     def create(cls, root: Path | str, *, arm: Arm, run_id: str | None = None, **fields: Any) -> RunStore:
+        fields.setdefault("schema_tools", DEFAULT_SCHEMA_TOOLS[arm])
         run = RunRecord(run_id=run_id or new_run_id(arm), arm=arm, started_at=datetime.now(UTC), **fields)
         directory = Path(root) / run.run_id
         directory.mkdir(parents=True, exist_ok=False)
@@ -85,17 +103,21 @@ class RunStore:
         return attempt
 
     def add_attempt(self, attempt: AttemptRecord, steps: Iterable[StepRecord]) -> None:
-        _append(self.directory / STEPS_FILE, steps)
-        _append(self.directory / ATTEMPTS_FILE, [attempt])
+        # Steps first: an attempt row marks the attempt as complete.
+        with self._lock:
+            _append(self.directory / STEPS_FILE, steps)
+            _append(self.directory / ATTEMPTS_FILE, [attempt])
 
     def add_evaluations(self, evaluations: Iterable[EvaluationRecord]) -> None:
         """Works on a reopened run, so cloud evaluations can land after the run has finished."""
-        _append(self.directory / EVALUATIONS_FILE, evaluations)
+        with self._lock:
+            _append(self.directory / EVALUATIONS_FILE, evaluations)
 
     def attempts(self) -> list[AttemptRecord]:
         return _read(self.directory / ATTEMPTS_FILE, AttemptRecord)
 
-    def finish(self, status: str | None = None) -> RunRecord:
+    def finish(self, status: RunStatus | None = None) -> RunRecord:
+        """Recomputes the roll-ups from the attempts on disk, so calling it again after re-runs is safe."""
         attempts = self.attempts()
         run = self.run
         run.ended_at = datetime.now(UTC)
@@ -105,16 +127,9 @@ class RunStore:
         run.n_completed = sum(a.status == "completed" for a in attempts)
         run.n_failed = sum(a.status in ("failed", "timeout") for a in attempts)
         run.n_infra_errors = sum(a.infra_error for a in attempts)
-        run.input_tokens = sum(a.input_tokens or 0 for a in attempts)
-        run.cached_input_tokens = sum(a.cached_input_tokens or 0 for a in attempts)
-        run.output_tokens = sum(a.output_tokens or 0 for a in attempts)
-        run.reasoning_tokens = sum(a.reasoning_tokens or 0 for a in attempts)
-        run.total_tokens = sum(a.total_tokens or 0 for a in attempts)
-        run.tool_time_s = sum(a.tool_time_s or 0.0 for a in attempts)
-        run.reasoning_time_s = sum(a.reasoning_time_s or 0.0 for a in attempts)
         run.attempts_duration_s = sum(a.duration_s for a in attempts)
         if status:
-            run.status = status  # type: ignore[assignment]
+            run.status = status
         elif not attempts or run.n_failed == len(attempts):
             run.status = "failed"
         else:
@@ -124,8 +139,6 @@ class RunStore:
 
 
 def write_json_schemas(directory: Path | str) -> list[Path]:
-    from .records import TABLES
-
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
     paths = []
