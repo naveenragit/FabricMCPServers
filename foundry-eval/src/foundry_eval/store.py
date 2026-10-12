@@ -118,6 +118,12 @@ class RunStore:
     def attempts(self) -> list[AttemptRecord]:
         return _read(self.directory / ATTEMPTS_FILE, AttemptRecord)
 
+    def steps(self) -> list[StepRecord]:
+        return _read(self.directory / STEPS_FILE, StepRecord)
+
+    def evaluations(self) -> list[EvaluationRecord]:
+        return _read(self.directory / EVALUATIONS_FILE, EvaluationRecord)
+
     def add_traces(self, traces: Iterable[TraceRecord]) -> None:
         """Foundry trace findings; spans take minutes to appear, so this runs after the attempts."""
         with self._lock:
