@@ -31,7 +31,6 @@ MUST_NOT_CALL = {
     "R06": [r"\bsys\.dm_\w+", r"\bquery_insights\b", r"\bINFO\.\w*QUERY"],
 }
 ANSWERABLE_RISK = {"R11", "R12", "R15", "R26", "R29"}
-NO_ARMS = {"R12": "needs a stub MCP server per tool contract; not built yet"}
 
 
 def split_of(row_id: str) -> str:
@@ -127,7 +126,7 @@ def build_dataset(
             criteria=criteria,
             expected_behavior=risk["behavior"],
             must_not_call=MUST_NOT_CALL.get(rid, []),
-            applies_to=[] if rid in NO_ARMS else risk["arms"],
+            applies_to=risk["arms"],
             gate=risk["gate"],
             checks=risk["checks"],
             split=split_of(rid),

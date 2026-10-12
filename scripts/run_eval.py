@@ -20,11 +20,12 @@ from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
 from azure.identity import AzureCliCredential
+from openai import APIError
+
 from foundry_eval import RunStore
-from foundry_eval.agents import ARMS, POLICY_V1
+from foundry_eval.agents import ARMS, POLICY_V1, STUB_ROWS
 from foundry_eval.dataset import Row, dataset_sha256, load_dataset
 from foundry_eval.net import install_dns_retry
-from openai import APIError
 
 install_dns_retry()
 
@@ -60,10 +61,38 @@ def preflight_proxy() -> None:
     print(f"arm 3 proxy reachable, tools: {tools}")
 
 
-def make_store(project: AIProjectClient, arm_key: str, args: argparse.Namespace, dataset: Path) -> RunStore:
+def preflight_stub() -> None:
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+
+    async def probe() -> list[str]:
+        async with Client(streamable_http_client(os.environ["INJECTION_STUB_URL"]), read_timeout_seconds=40, cache=None) as c:
+            return [t.name for t in (await c.list_tools()).tools]
+
+    try:
+        tools = asyncio.run(asyncio.wait_for(probe(), 60))
+    except Exception as exc:
+        sys.exit(f"the R12 stub is not reachable through the tunnel ({type(exc).__name__}). Start scripts\\serve_stubs.py.")
+    print(f"R12 stub reachable, tools: {tools}")
+
+
+def stub_environment(project: AIProjectClient, arm: str) -> dict[str, str]:
+    stub = ARMS[arm].stub_agent_name
+    version = project.agents.get(stub).as_dict()["versions"]["latest"]
+    return {"r12_agent": stub, "r12_agent_version": str(version["version"])}
+
+
+def make_store(project: AIProjectClient, arm_key: str, args: argparse.Namespace, dataset: Path, with_stub: bool) -> RunStore:
     arm = ARMS[arm_key]
     latest = project.agents.get(arm.agent_name).as_dict()["versions"]["latest"]
     instructions = (latest.get("definition") or {}).get("instructions") or ""
+    environment = (
+        {"arm3_hosting": "local proxy behind a dev tunnel", "arm3_identity": "signed-in user (azure cli)"}
+        if arm_key == "fabric"
+        else {}
+    )
+    if with_stub:
+        environment |= stub_environment(project, arm_key)
     return RunStore.create(
         RUNS,
         arm=arm_key,
@@ -84,24 +113,30 @@ def make_store(project: AIProjectClient, arm_key: str, args: argparse.Namespace,
         git_sha=git("rev-parse", "HEAD") or None,
         git_dirty=bool(git("status", "--porcelain")),
         harness_version=HARNESS_VERSION,
-        environment={"arm3_hosting": "local proxy behind a dev tunnel", "arm3_identity": "signed-in user (azure cli)"}
-        if arm_key == "fabric"
-        else {},
+        environment=environment,
     )
 
 
 def run_attempt(client, store: RunStore, row: Row, repeat: int) -> tuple[str, str, int, str]:
     arm = store.run.arm
+    agent = ARMS[arm].stub_agent_name if row.id in STUB_ROWS else ARMS[arm].agent_name
+    version = store.run.environment.get("r12_agent_version") if row.id in STUB_ROWS else store.run.agent_version
     retry_of = None
     for tries in range(2):
         recorder = store.recorder(
-            question_id=row.id, question=row.query, repeat_index=repeat, retry_of=retry_of, preview_chars=FULL_OUTPUT
+            question_id=row.id,
+            question=row.query,
+            repeat_index=repeat,
+            retry_of=retry_of,
+            agent_name=agent,
+            agent_version=version,
+            preview_chars=FULL_OUTPUT,
         )
         try:
             stream = client.responses.create(
                 input=row.query,
                 stream=True,
-                extra_body={"agent_reference": {"name": ARMS[arm].agent_name, "type": "agent_reference"}},
+                extra_body={"agent_reference": {"name": agent, "type": "agent_reference"}},
             )
             for event in stream:
                 recorder.on_event(event.model_dump(mode="json"))
@@ -144,9 +179,12 @@ def main() -> int:
 
     if "fabric" in args.arms:
         preflight_proxy()
+    with_stub = any(r.id in STUB_ROWS and set(r.applies_to) & set(args.arms) for r in rows)
+    if with_stub:
+        preflight_stub()
     project = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential())
     client = project.get_openai_client()
-    stores = {arm: make_store(project, arm, args, dataset) for arm in args.arms}
+    stores = {arm: make_store(project, arm, args, dataset, with_stub) for arm in args.arms}
 
     work = [
         (arm, row, repeat)

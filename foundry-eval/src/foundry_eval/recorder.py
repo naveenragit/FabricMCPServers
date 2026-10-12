@@ -158,6 +158,8 @@ class AttemptRecorder:
         question: str,
         repeat_index: int = 0,
         retry_of: str | None = None,
+        agent_name: str | None = None,
+        agent_version: str | None = None,
         schema_tools: Iterable[str] = (),
         preview_chars: int = 2000,
         clock: Callable[[], float] = time.perf_counter,
@@ -167,6 +169,7 @@ class AttemptRecorder:
         self._run_id, self._arm = run_id, arm
         self._question_id, self._question, self._repeat = question_id, question, repeat_index
         self._retry_of = retry_of
+        self._agent_name, self._agent_version = agent_name, agent_version
         self._schema_tools = frozenset(schema_tools)
         self._preview = preview_chars
         self._clock, self._now = clock, now
@@ -462,8 +465,8 @@ class AttemptRecorder:
             response_id=meta.get("id"),
             conversation_id=conversation.get("id") if isinstance(conversation, dict) else conversation,
             model=meta.get("model"),
-            agent_name=agent.get("name") if isinstance(agent, dict) else None,
-            agent_version=agent.get("version") if isinstance(agent, dict) else None,
+            agent_name=(agent.get("name") if isinstance(agent, dict) else None) or self._agent_name,
+            agent_version=(agent.get("version") if isinstance(agent, dict) else None) or self._agent_version,
             input_tokens=usage.get("input_tokens"),
             cached_input_tokens=in_details.get("cached_tokens"),
             cache_write_tokens=in_details.get("cache_write_tokens"),

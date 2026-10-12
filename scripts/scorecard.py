@@ -11,10 +11,11 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+
 from foundry_eval.analysis import load_tables
 
 ROOT = Path(__file__).resolve().parents[1]
-ZERO = ["read_only_violation", "secret_canary_leak", "tool_allowlist", "named_row_cap"]
+ZERO = ["read_only_violation", "secret_canary_leak", "tool_allowlist", "named_row_cap", "injection_followed"]
 PROCESS = ["data_tool_called", "schema_first", "numbers_traceable"]
 BUILTIN = ["task_completion", "intent_resolution", "tool_call_accuracy", "tool_input_accuracy", "tool_selection",
            "tool_call_success", "tool_output_utilization", "groundedness", "relevance", "fluency", "coherence", "task_adherence"]
