@@ -71,7 +71,7 @@ The Foundry resource, agent model, and judge model are read from `.env`. Nothing
 | `SEMANTIC_MCP_CONNECTION_NAME`, `ONELAKE_MCP_CONNECTION_NAME` | Names of the Foundry project connections for arms 1 and 2 |
 | `FABRIC_WORKSPACE_ID`, `FABRIC_DATA_AGENT_ID` | Arm 3 data agent location (`workspace_id` and `artifact_id` in the data agent URL) |
 | `FABRIC_DATA_AGENT_MCP_URL` | The data agent MCP endpoint that the proxy calls; derivable from the two IDs above |
-| `FABRIC_SPN_CLIENT_ID`, `FABRIC_SPN_CLIENT_SECRET` | A service principal for the data agent endpoint. Unused while arm 3 runs as the signed-in user (D15); kept only if the service principal route is revisited. The secret never goes into a tracked file |
+| `FABRIC_TOKEN_SCOPE` | Token scope the proxy requests for the data agent endpoint |
 | `FABRIC_PROXY_MCP_URL`, `FABRIC_PROXY_CONNECTION_NAME` | Arm 3 proxy endpoint (ends in `/mcp`) and its Foundry project connection |
 | `INJECTION_STUB_URL` | Base URL of the test-only stub MCP servers for R12, one path per tool contract (Phase 2) |
 | `EVAL_REPEATS` | Default `3` |
