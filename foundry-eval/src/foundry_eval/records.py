@@ -120,7 +120,9 @@ class AttemptRecord(_Record):
     time_to_first_token_s: float | None = None
     reasoning_time_s: float | None = Field(None, description="Model thinking, from reasoning item spans")
     tool_time_s: float | None = Field(
-        None, description="Wall time with an MCP tool call running; parallel calls count once"
+        None,
+        description="Stream estimate. Foundry emits mcp_call_arguments.done and mcp_call.completed together, so this is "
+        "close to zero and is not tool execution time; use TraceRecord.tool_time_s",
     )
     tool_list_time_s: float | None = Field(None, description="MCP tool discovery")
     model_other_s: float | None = Field(
@@ -232,6 +234,10 @@ class TraceRecord(_Record):
     agent_span_s: float | None = Field(None, description="Server-side duration of the agent invocation")
     tool_spans: int = 0
     tool_names: list[str] = Field(default_factory=list)
+    tool_time_s: float | None = Field(
+        None, description="Server-side execution time of the tool calls from the trace; the stream cannot show it"
+    )
+    tool_span_s: list[float] = Field(default_factory=list, description="Duration of each tool span, in call order")
     tool_error: bool = Field(
         False, description="The trace shows a tool error: error.type starts with tool, or a tool span failed"
     )

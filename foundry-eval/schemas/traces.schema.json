@@ -95,6 +95,27 @@
       "title": "Tool Names",
       "type": "array"
     },
+    "tool_time_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Server-side execution time of the tool calls from the trace; the stream cannot show it",
+      "title": "Tool Time S"
+    },
+    "tool_span_s": {
+      "description": "Duration of each tool span, in call order",
+      "items": {
+        "type": "number"
+      },
+      "title": "Tool Span S",
+      "type": "array"
+    },
     "tool_error": {
       "default": false,
       "description": "The trace shows a tool error: error.type starts with tool, or a tool span failed",

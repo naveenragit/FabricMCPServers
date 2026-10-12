@@ -163,6 +163,23 @@ def test_stream_detected_tool_error_counts_once_even_when_traced_twice(tmp_path)
     assert store.finish().n_tool_errors == 1
 
 
+def test_tool_time_comes_from_the_trace_and_parallel_spans_count_once(tmp_path):
+    store = stored_run(tmp_path, failed=False)
+    spans = [
+        {"rid": "resp_t", "operation_Id": "op", "name": "invoke_agent a:1", "success": "True", "resultCode": "0",
+         "duration": 12000, "timestamp": "2026-10-12T15:55:15.125Z", "tool": "", "err": ""},
+        {"rid": "resp_t", "operation_Id": "op", "name": "execute_tool x", "success": "True", "resultCode": "0",
+         "duration": 2000, "timestamp": "2026-10-12T15:55:16.000Z", "tool": "x", "err": ""},
+        {"rid": "resp_t", "operation_Id": "op", "name": "execute_tool y", "success": "True", "resultCode": "0",
+         "duration": 3000, "timestamp": "2026-10-12T15:55:17.000Z", "tool": "y", "err": ""},
+        {"rid": "resp_t", "operation_Id": "op", "name": "execute_tool z", "success": "True", "resultCode": "0",
+         "duration": 1000, "timestamp": "2026-10-12T15:55:25.000Z", "tool": "z", "err": ""},
+    ]
+    [trace] = build_trace_records(store.attempts(), spans)
+    assert trace.tool_span_s == [2.0, 3.0, 1.0]
+    assert trace.tool_time_s == pytest.approx(5.0), "x (1-3s) and y (2-5s) overlap, so 1s to 5s plus 1s for z"
+
+
 def test_attempts_without_spans_yet_are_left_for_a_later_pass(tmp_path):
     store = stored_run(tmp_path, failed=True)
     records, missing = enrich_run(store, "app", query=lambda app, kql: [])

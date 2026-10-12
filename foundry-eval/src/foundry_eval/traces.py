@@ -31,7 +31,7 @@ def trace_query(response_ids: Iterable[str], lookback: str = "30d") -> str:
         "| extend rid = tostring(customDimensions['gen_ai.response.id']) "
         f"| where rid in ({quoted}) "
         "| where name startswith 'invoke_agent' or name startswith 'execute_tool' "
-        "| project rid, operation_Id, name, success, resultCode, duration, "
+        "| project rid, operation_Id, name, success, resultCode, duration, timestamp, "
         "tool = tostring(customDimensions['gen_ai.tool.name']), "
         "err = tostring(customDimensions['error.type'])"
     )
@@ -52,6 +52,25 @@ def query_app_insights(app_id: str, kql: str) -> list[dict[str, Any]]:
     table = response.json()["tables"][0]
     columns = [c["name"] for c in table["columns"]]
     return [dict(zip(columns, row, strict=True)) for row in table["rows"]]
+
+
+def _union_s(spans: list[dict[str, Any]]) -> float:
+    """Wall time covered by the tool spans in seconds; parallel calls count once."""
+    intervals = []
+    for s in spans:
+        if not s.get("timestamp"):
+            return sum(float(x["duration"]) for x in spans) / 1000
+        start = datetime.fromisoformat(str(s["timestamp"]).replace("Z", "+00:00")).timestamp()
+        intervals.append((start, start + float(s["duration"]) / 1000))
+    total, covered = 0.0, None
+    for start, end in sorted(intervals):
+        if covered is None or start > covered:
+            total += end - start
+            covered = end
+        elif end > covered:
+            total += end - covered
+            covered = end
+    return total
 
 
 def _is_true(value: Any) -> bool | None:
@@ -88,6 +107,8 @@ def build_trace_records(
                 agent_span_s=(float(agent["duration"]) / 1000 if agent else None),
                 tool_spans=len(tools),
                 tool_names=[s["tool"] for s in tools if s.get("tool")],
+                tool_time_s=_union_s(tools) if tools else None,
+                tool_span_s=[float(s["duration"]) / 1000 for s in tools],
                 tool_error=bool(error_type and error_type.startswith("tool"))
                 or any(_is_true(s.get("success")) is False for s in tools),
                 fetched_at=fetched_at or datetime.now(UTC),

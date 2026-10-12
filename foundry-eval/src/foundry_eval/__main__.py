@@ -9,11 +9,25 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from .store import RunStore, write_json_schemas
 
 
+def _load_dotenv() -> None:
+    """Fill FOUNDRY_APPINSIGHTS_APP_ID and friends from the nearest .env, without overriding the environment."""
+    for directory in (Path.cwd(), *Path.cwd().parents):
+        env = directory / ".env"
+        if env.exists():
+            for line in env.read_text(encoding="utf-8").splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip())
+            return
+
+
 def main(argv: list[str] | None = None) -> int:
+    _load_dotenv()
     parser = argparse.ArgumentParser(prog="foundry_eval")
     commands = parser.add_subparsers(dest="command", required=True)
     schemas = commands.add_parser("schemas", help="write the JSON Schema files")

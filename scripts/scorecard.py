@@ -7,7 +7,6 @@ Needs the analysis extra (pandas). Reads the plan's tables only; no reference va
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -39,7 +38,7 @@ def main() -> int:
     parser.add_argument("--out")
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
-    attempts, evals, steps, runs = tables["attempts"], tables["evaluations"], tables["steps"], tables["runs"]
+    attempts, evals, runs = tables["attempts"], tables["evaluations"], tables["runs"]
     ok = evals[evals["status"] == "ok"]
     out: list[str] = []
 
@@ -58,7 +57,6 @@ def main() -> int:
     cj = cj.merge(attempts[["attempt_id", "tool_error"]], on="attempt_id")
     rows = []
     for arm, g in cj.groupby("arm"):
-        n_att = int((attempts["arm"] == arm).sum())
         rows.append({"arm": arm, "scored": len(g), "correct": int((g["score"] == 1.0).sum()), "correct_rate_of_scored": pct((g["score"] == 1.0).mean()), "mean_criteria_pass": pct(g["score"].mean())})
     out.append(pd.DataFrame(rows).set_index("arm").to_string() if rows else "no scored rows")
     audit = ok[ok["evaluator"] == "numeric_audit"]
@@ -114,6 +112,11 @@ def main() -> int:
 
     section("Efficiency (completed attempts only; agent tokens only, judge tokens excluded)")
     done = attempts[attempts["status"] == "completed"]
+    done = done.merge(
+        tables["traces"][["attempt_id", "tool_time_s"]].rename(columns={"tool_time_s": "tool_time_trace_s"}),
+        on="attempt_id",
+        how="left",
+    )
     eff = done.groupby("arm").agg(
         attempts=("attempt_id", "count"),
         duration_p50=("duration_s", "median"),
@@ -124,10 +127,14 @@ def main() -> int:
         tool_calls_mean=("tool_calls", "mean"),
         schema_calls_mean=("schema_calls", "mean"),
         query_calls_mean=("query_calls", "mean"),
-        tool_time_mean=("tool_time_s", "mean"),
+        tool_time_trace_mean=("tool_time_trace_s", "mean"),
         reasoning_time_mean=("reasoning_time_s", "mean"),
     ).round(1)
     out.append(eff.T.to_string())
+    out.append(
+        "\ntool_time_trace is the server-side execution time from Foundry's trace. The stream cannot show it: Foundry emits"
+        " mcp_call_arguments.done and mcp_call.completed at the same instant, so the recorder's stream tool time is not used here."
+    )
     correct_ids = set(cj[cj["score"] == 1.0]["attempt_id"])
     tpc = []
     for arm, g in done.groupby("arm"):

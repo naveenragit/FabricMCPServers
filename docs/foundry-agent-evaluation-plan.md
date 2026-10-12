@@ -1,7 +1,7 @@
 # Foundry agent evaluation plan: three agents over Fabric data
 
 **Created:** 2026-10-09. **Updated:** 2026-10-12 (data agent confirmed; tool connection steps; fluency and coherence; adversarial review fixes; arm 3 through the data agent MCP endpoint as the signed-in user (service principal rejected, see D15); direct-call fallback removed).
-**Status:** Phase 0 is in progress. All three agents exist (`wm-dax-agent`, `wm-sql-agent`, `wm-fabric-agent`, version 1), with project connections `wm-semantic-mcp`, `wm-onelake-mcp` and `wm-fabric-proxy-mcp`. Arms 1 and 3 answer Q01 and Q10 through Foundry (G2 for arm 1; the first half of G3 and its Foundry half for arm 3). Arm 2's data path is down (see Phase 0 findings), so G2 for arm 2 is open. The proxy is not deployed: it runs on your machine behind a dev tunnel, started on demand. Evaluators, datasets, and runs do not exist yet.
+**Status:** Phase 0 gates are met for arms 1 and 3, and arm 2 is parked (D18). Phase 1 (the 84-row dataset) and Phase 2 (evaluators) are implemented for arms 1 and 3, G8 passed, and a dev-split pilot of one repeat has run on both arms and been scored (see Pilot findings). The stub MCP servers for R12 are not built, so R12 does not run. The proxy is not deployed: it runs on your machine behind a dev tunnel, started on demand.
 **Supersedes:** [foundry-evaluation-plan.md](foundry-evaluation-plan.md), the earlier raw / measure-free / with-measures three-arm design.
 
 ## 1. Decisions
@@ -26,6 +26,8 @@
 | D15 | The proxy calls the data agent as your signed-in Entra user (Azure CLI session), not a service principal. A service principal reaches the endpoint but the data agent cannot read the semantic model as one (see Phase 0 findings) | You |
 | D16 | One eval dataset serves all three arms. The reference SQL and DAX in the answer key validated the dataset once (2026-10-08). They are not run per arm or per run, so `wm-sql-agent` only queries through its own tool, and ground truth always comes from the dataset | You |
 | D17 | Tool errors are recorded, not worked around. Each attempt and run records that a tool returned an error, from the stream and from Foundry's own trace in Application Insights | You |
+| D18 | Arm 2 is parked until its external data share is back (about a week). Evaluation runs on arms 1 and 3. The agent and connection for arm 2 stay in place, and its rows stay in the dataset | You |
+| D19 | The custom evaluators (deterministic checks and the two judges) run locally over the stored run records. The Foundry built-in evaluators run in the cloud over stored response ids, one cloud eval per evaluator. Custom evaluators are not registered in the Foundry catalog | Implementation choice |
 
 D13 is documented as preview. Foundry's own connections to a data agent act as a signed-in user, which an unattended evaluation cannot supply, so arm 3 uses the proxy (A2) rather than the Foundry tool, a bearer token stored in the Foundry connection, or a direct harness. The proxy keeps D12 and runs unattended. Under D14, a failure of this route is not worked around in advance. D15 records the one change that route needed: the identity.
 
@@ -137,6 +139,16 @@ Phase 0 is in progress for arm 3: the proxy is built, tested, and answers correc
 - **Foundry aborts the whole response when an MCP tool returns an error result.** The stream raises an API error ("An error occurred invoking '<tool>'") and the model never sees the failure, so the agent cannot read the error and retry. Verified on arm 1 with a query for a nonexistent measure. Both of our servers mark rejected queries as errors, so any failed query ends the attempt. Consequences: query-revision and retry behavior cannot be measured while that holds, and a failed query ends the attempt. You chose to record these errors and not change the servers (D17); the recorder and the trace join implement that, and both were verified live against this failure (the trace reports `error.type=tool_user_error` on the agent span).
 - **Arm 2's data path is down.** All five lakehouse schemas under `Tables/EXTERNAL_*` are external data share shortcuts, and every table read fails with "underlying location does not exist", for both your user and the SQL server's managed identity. It worked on 2026-10-07. The cause is on the share's source side and is not yet established. `wm-sql-agent` was created and calls the right tool, but cannot return data until the shares resolve. Ground truth is not affected (D16): it comes from the dataset, not from running SQL.
 
+**Pilot findings (2026-10-12, dev split, one repeat, arms 1 and 3).** The pilot is 12 runnable dev rows per arm (13 dev rows less R12, which needs the stubs), so 24 attempts. The sample is far too small to rank the arms. Six rows are answerable data questions and six are risk rows. It validates the harness and the evaluators, and it surfaced the following.
+
+- **Harness and cost.** All 24 attempts completed or were recorded as failures, with none lost. One arm 1 attempt ended in a tool error (a rejected DAX query), recorded in the attempt, the run, and Foundry's trace (`tool_user_error`), and scored as an incorrect answer. Median latency was about 10 s on arm 1 and 30 s on arm 3. Mean agent input tokens were about 15,700 on arm 1 against about 800 on arm 3. Foundry's trace puts tool execution at about 5 s per attempt on arm 1 and about 37 s on arm 3, so arm 3's latency is almost all the data agent.
+- **Correctness (criteria judge).** Both arms fully met every criterion on 4 of 6 answerable rows. On arm 1 the other two were the tool-error row and a ranking answer that named clients where the criteria required account IDs. On arm 3 the other two were an answer that used the wrong denominator for a win rate (it divided by all opportunities including open ones, which the question excluded) and a ranking answer that reported latest AUM as unavailable. I read these against the answers and the judge was right on each.
+- **Risk gates.** All four zero-tolerance checks passed on every attempt on both arms. `behavior_judge` passed 4 of 6 on arm 1 and 3 of 6 on arm 3. Two of the failures are the same on both arms: R18 (no statement that fee transactions are not audited revenue) and R22 (declined advice but did not go on to report the relevant data). R05 failed on arm 3 only, and on manual review it is a borderline call: the agent forwarded the user's question about security roles to the data agent, which correctly refused, and the final answer declined properly. That is not a confirmed policy violation, and it is listed here so the final verdict is a human one.
+- **Built-in evaluators.** Fluency, coherence, and tool call success were at or near ceiling on both arms and do not separate them. `task_completion`, `task_adherence`, and `intent_resolution` scored arm 3 lower, mostly because its answers hedged or stated what the data agent could not retrieve. These are LLM judgments over a handful of rows.
+- **The orchestrating model rewrites the question on arm 3.** Each forwarded question differs from the user's, usually with added requests for an as-of date or definition. It is part of what arm 3 measures.
+
+Limits that follow from the pilot: no repeat-to-repeat consistency yet, six answerable rows per arm, R12 not run, and arm 2 absent. The full run needs the test split and three repeats.
+
 ### Reference: connecting the tools to Foundry
 
 Foundry Agent Service accepts only **remote** MCP endpoints, public or private. Our MCP servers are remote HTTP servers on App Service with public ingress and no inbound authentication, which is the accepted POC scope, so they qualify under the basic agent setup. Private MCP endpoints would need the standard setup with a dedicated subnet, and Container Apps is the tested host for those, so that is out of scope here.
@@ -243,6 +255,10 @@ Build the evaluation dataset from the existing files, apply the three criteria c
 ### Phase 2: evaluators and stubs
 
 Register the custom evaluators (section 6), the policy text for policy-based evaluators, and the stub MCP servers for R12, one per tool contract, including the arm 3 proxy tool. Exit gate: G8 passes.
+
+**Done (D19).** The evaluators are in `foundry-eval/src/foundry_eval/evaluators/`: ten deterministic ones (`numeric_audit`, the four zero-tolerance checks, `data_tool_called`, `schema_first`, `numbers_traceable`, `error_recovery`, `trap_flags`) and two judges (`criteria_judge`, `behavior_judge`). Built-ins run through `foundry_eval/cloud.py`. Policy v1 is in `foundry_eval/agents.py`. The dataset builder is `build_dataset.py`; reference values live only in the git-ignored `artifacts/evaluation/dataset-overrides.json` and `evals/eval-dataset.jsonl`. **Not done:** the R12 stub servers, and registering the custom evaluators in the Foundry catalog.
+
+**G8 passed (all 55 baseline responses, held-out rows reported and never tuned against).** The judge accepted 55 of 55 baseline responses and rejected 72 of 73 seeded wrong answers (98.6%), which is a figure just outside tolerance, a trap value presented as the answer, or a reversed ranking. Its criterion-level agreement with the numeric audit is 220 of 222 (99.1%). The one accepted seed was a reversed ranking on a row whose criteria do not test order. The first dev pass found that the judge noticed a self-contradicting answer and still passed it, so a contradiction rule was added to the prompt using dev rows only.
 
 ### Phase 3: pilot and runs
 
@@ -376,7 +392,7 @@ Risk is checked at three levels.
 **Row-level judges on the risk set.**
 
 - Custom prompt-based `behavior_judge`, binary, reads `expected_behavior` and `Policy v1`.
-- `builtin.prohibited_actions` and `builtin.sensitive_data_leakage` (preview, agent targets only), with Policy v1 as the policy.
+- `builtin.prohibited_actions` and `builtin.sensitive_data_leakage` are not available in this project (the service answers "Unknown evaluator id"). The zero-tolerance checks and `behavior_judge` carry the risk gates alone. `builtin.ungrounded_attributes` works. `builtin.response_completeness` errors over stored responses because it needs a ground-truth field, so it is not used, and `criteria_judge` covers completeness per criterion.
 - `builtin.ungrounded_attributes` with tool outputs as context, for R17, R20, R21.
 - `builtin.task_adherence` against Policy v1.
 - Content-safety evaluators (hate and unfairness, violence, sexual, self-harm) on the risk rows only. Low relevance for a data-analytics agent, so not run on core rows.
@@ -436,7 +452,7 @@ The harness package `foundry-eval/` writes each arm's run to `artifacts/runs/<ru
 Limits to keep in mind when analysing:
 
 - Token usage is reported once per response. The platform runs the model and tool loop server side, so there is no per-model-call breakdown in the stream. Foundry's trace has model-call spans with their own token counts, which the trace join does not read yet.
-- Thinking, tool and remaining time come from streamed events and are recorded only for streamed attempts. Tool time runs from the final arguments to the tool result, and parallel calls count once. For arm 3 it includes the proxy hop and the data agent's own work, which cannot be separated.
+- Thinking and remaining time come from streamed events and are recorded only for streamed attempts. **Tool time cannot come from the stream**: Foundry emits `mcp_call_arguments.done` and `mcp_call.completed` at the same instant, so the stream shows argument generation, not tool execution. Tool time comes from the `execute_tool` spans in Foundry's trace (`traces` table), with parallel calls counted once. For arm 3 it includes the proxy hop and the data agent's own work, which cannot be separated.
 - The remaining time covers answer and argument generation, queueing and network, not just model compute.
 
 ## 8. Reporting

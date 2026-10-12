@@ -156,7 +156,7 @@ def main() -> int:
         if arm in row.applies_to
     ]
     print(f"{len(work)} attempts: {len(rows)} rows x {args.repeats} repeats x arms {args.arms}; concurrency {args.concurrency}", flush=True)
-    for arm, store in stores.items():
+    for store in stores.values():
         print(f"  run {store.run.run_id}", flush=True)
 
     lock, done = threading.Lock(), 0
@@ -172,8 +172,9 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         list(pool.map(job, work))
 
-    for arm, store in stores.items():
+    for store in stores.values():
         run = store.finish()
+        arm = store.run.arm
         print(f"{arm}: {run.status} attempts={run.n_attempts} completed={run.n_completed} failed={run.n_failed} infra={run.n_infra_errors} tool_errors={run.n_tool_errors}")
     return 0
 

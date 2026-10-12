@@ -23,9 +23,9 @@ from foundry_eval.evaluators import config_from_env
 from foundry_eval.evaluators.base import Case
 from foundry_eval.evaluators.deterministic import numeric_audit
 from foundry_eval.evaluators.judges import FoundryJudge, make_criteria_judge
+from foundry_eval.net import install_dns_retry
 from foundry_eval.numbers import extract_numbers
 from foundry_eval.records import AttemptRecord
-from foundry_eval.net import install_dns_retry
 
 install_dns_retry()
 

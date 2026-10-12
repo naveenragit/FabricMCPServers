@@ -216,7 +216,7 @@
         }
       ],
       "default": null,
-      "description": "Wall time with an MCP tool call running; parallel calls count once",
+      "description": "Stream estimate. Foundry emits mcp_call_arguments.done and mcp_call.completed together, so this is close to zero and is not tool execution time; use TraceRecord.tool_time_s",
       "title": "Tool Time S"
     },
     "tool_list_time_s": {

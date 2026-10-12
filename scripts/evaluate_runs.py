@@ -60,7 +60,7 @@ def main() -> int:
                 steps.setdefault(step.attempt_id, []).append(step)
             done = {(e.attempt_id, e.evaluator) for e in store.evaluations() if e.status == "ok"}
 
-            def local(attempt):
+            def local(attempt, store=store, steps=steps, done=done):
                 row = rows.get(attempt.question_id)
                 if row is None:
                     return 0
