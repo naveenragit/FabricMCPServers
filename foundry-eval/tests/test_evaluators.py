@@ -133,6 +133,8 @@ def test_numbers_traceable_flags_a_figure_that_no_tool_returned():
     good = case(answer="3,000 clients; AUM $22.44 billion", calls=[("t", "{}", None, out)])
     bad = case(answer="3,000 clients; AUM $25.10 billion", calls=[("t", "{}", None, out)])
     assert numbers_traceable(good).passed and not numbers_traceable(bad).passed
+    dated = case(answer="AUM was $22.44 billion as of December 26, 2025.", calls=[("t", "{}", None, out)])
+    assert numbers_traceable(dated).passed, "a bare year is not a data figure"
 
 
 def test_error_recovery_records_the_platform_abort_as_not_recoverable():

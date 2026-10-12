@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -94,9 +95,18 @@ def run_builtin_evaluation(
         if run.status in ("completed", "failed", "canceled") or time.monotonic() > deadline:
             break
         time.sleep(poll_s)
-    items = []
+    items: list[dict[str, Any]] = []
     if run.status == "completed":
-        items = [i.model_dump(mode="json") for i in _retry(lambda: list(client.evals.runs.output_items.list(run.id, eval_id=ev.id)))]
+        expected = len(attempts)
+        # The run can report completed a moment before its items are listable.
+        for _ in range(8):
+            items = [
+                i.model_dump(mode="json")
+                for i in _retry(lambda: list(client.evals.runs.output_items.list(run.id, eval_id=ev.id)))
+            ]
+            if len(items) >= expected:
+                break
+            time.sleep(poll_s)
     return ev.id, run.id, run.status, items
 
 
@@ -150,18 +160,51 @@ def records_from_items(
 
 
 def evaluate_run_in_cloud(
-    client: Any, store: RunStore, judge_model: str, evaluators: dict[str, str] | None = None, *, only_without_errors: bool = True
-) -> tuple[list[EvaluationRecord], str]:
-    """Evaluate the run's attempts that finished with a response; returns the records and the cloud run status."""
-    done = {e.attempt_id for e in store.evaluations() if e.evaluator.startswith("builtin.") and e.status == "ok"}
-    attempts = [
-        a
-        for a in store.attempts()
-        if a.response_id and a.status == "completed" and a.attempt_id not in done and (not only_without_errors or not a.tool_error)
-    ]
-    if not attempts:
-        return [], "nothing to evaluate"
-    eval_id, run_id, status, items = run_builtin_evaluation(client, attempts, judge_model, evaluators, name=f"{store.run.run_id}")
-    records = records_from_items(items, attempts, judge_model, eval_id, run_id, evaluators)
-    store.add_evaluations(records)
-    return records, status
+    client: Any,
+    store: RunStore,
+    judge_model: str,
+    evaluators: dict[str, str] | None = None,
+    *,
+    workers: int = 6,
+) -> tuple[list[EvaluationRecord], dict[str, str]]:
+    """One cloud eval per evaluator, in parallel, so a failure in one cannot hide the others.
+
+    Only finished attempts without a tool error are sent (the others have no complete response to judge), and only the
+    evaluator/attempt pairs that have no result yet, so a re-run fills gaps. Returns the records and failures by evaluator.
+    """
+    evaluators = evaluators or BUILTINS
+    done = {(e.attempt_id, e.evaluator) for e in store.evaluations() if e.status == "ok"}
+    base = [a for a in store.attempts() if a.response_id and a.status == "completed" and not a.tool_error]
+    work = {
+        short: [a for a in base if (a.attempt_id, f"builtin.{short}") not in done] for short in evaluators
+    }
+    work = {short: attempts for short, attempts in work.items() if attempts}
+    if not work:
+        return [], {}
+
+    def one(short: str) -> list[EvaluationRecord]:
+        attempts = work[short]
+        eval_id, run_id, status, items = run_builtin_evaluation(
+            client, attempts, judge_model, {short: evaluators[short]}, name=f"{store.run.run_id}:{short}"
+        )
+        if status != "completed":
+            raise RuntimeError(f"cloud run {run_id} ended with status {status!r}")
+        records = records_from_items(items, attempts, judge_model, eval_id, run_id, {short: evaluators[short]})
+        got = len({r.attempt_id for r in records})
+        if got < len(attempts):
+            raise RuntimeError(f"cloud run {run_id} returned results for {got} of {len(attempts)} attempts")
+        return records
+
+    records: list[EvaluationRecord] = []
+    failures: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {short: pool.submit(one, short) for short in work}
+        for short, future in futures.items():
+            try:
+                found = future.result()
+            except Exception as exc:
+                failures[short] = f"{type(exc).__name__}: {exc}"[:300]
+                continue
+            store.add_evaluations(found)
+            records += found
+    return records, failures

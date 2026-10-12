@@ -17,8 +17,14 @@ _SCALES = {
 }  # fmt: skip
 
 # Dates, identifiers and quarter labels are not figures; blank them so their digits are not read.
+_MONTH = (
+    r"(?:January|February|March|April|May|June|July|August|September|October|November|December"
+    r"|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\b\.?"
+)
 _NOISE = re.compile(
-    r"\d{4}-\d{2}-\d{2}|\b[A-Z]{2,6}-\d+\b|\b(?:FUND|CD-?)\d+\b|\bQ[1-4]\b|\b(?:19|20)\d{2}\b(?=[ ,.)\-/]|$)",
+    rf"\b{_MONTH}\s+\d{{1,2}}(?!\d)(?:st|nd|rd|th)?(?:,?\s+(?:19|20)\d{{2}}\b)?"
+    rf"|\b\d{{1,2}}\s+{_MONTH}(?:\s+(?:19|20)\d{{2}}\b)?"
+    r"|\d{4}-\d{2}-\d{2}|\b[A-Z]{2,6}-\d+\b|\b(?:FUND|CD-?)\d+\b|\bQ[1-4]\b|\b(?:19|20)\d{2}\b(?=[ ,.)\-/]|$)",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(

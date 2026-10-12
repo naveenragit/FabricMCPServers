@@ -52,6 +52,13 @@ def test_dates_ids_and_quarters_are_not_read_as_figures():
     assert texts == ["6"]
 
 
+def test_written_dates_are_not_figures_but_market_and_decision_words_are_left_alone():
+    assert extract_numbers("as of December 26, 2025") == []
+    assert extract_numbers("26 December 2025") == []
+    assert [n.value for n in extract_numbers("December 2025 had 52,315 transactions")] == [52315]
+    assert [n.value for n in extract_numbers("Market 12 and Decision 3")] == [12, 3]
+
+
 def test_thousands_separators_ranges_and_percent_signs():
     nums = extract_numbers("8-12 interactions: 1,687 clients, 61.74%")
     assert [n.value for n in nums] == [8, 12, 1687, 61.74]

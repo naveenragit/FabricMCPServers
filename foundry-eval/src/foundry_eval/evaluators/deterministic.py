@@ -193,6 +193,8 @@ def numbers_traceable(case: Case) -> Outcome:
     for num in extract_numbers(case.answer):
         if num.value in (0, 1) or abs(num.value) < 3:
             continue
+        if num.decimals == 0 and 1900 <= num.value <= 2100 and not num.money and not num.percent and "," not in num.text:
+            continue  # a bare year such as "December 26, 2025", not a data figure
         ok = any(abs(num.value - o.value) <= max(0.5 * num.unit, 1e-6 * abs(o.value)) or abs(num.value - o.value * 100) <= 0.5 * num.unit * 100 for o in out_nums)
         if not ok:
             untraced.append(num.text)
