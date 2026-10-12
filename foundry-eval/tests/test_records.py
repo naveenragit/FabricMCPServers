@@ -192,6 +192,20 @@ def test_retry_is_linked_and_message_text_alone_does_not_mark_infra():
     assert attempt.retry_of == "abc" and attempt.infra_error is False
 
 
+def test_rate_limit_and_failed_dependency_are_infra_but_a_tool_error_is_not():
+    from openai import APIError
+
+    def attempt_for(message):
+        rec = AttemptRecorder(run_id="r1", arm="dax", question_id="q", question="?")
+        rec.fail(APIError(message, request=None, body=None))
+        return rec.build()[0]
+
+    assert attempt_for("Model deployment rate limit exceeded. Your requests have exceeded token rate limit.").infra_error
+    assert attempt_for("[Failed Dependency] while invoking tool x, the dependency call to the MCP server failed").infra_error
+    tool = attempt_for("An error occurred invoking 'x': Model rate limit exceeded upstream")
+    assert tool.tool_error and not tool.infra_error
+
+
 def test_non_streaming_records_totals_only_and_accepts_sdk_style_models():
     rec = AttemptRecorder(run_id="r1", arm="sql", question_id="q02", question="?")
     rec.record_response(

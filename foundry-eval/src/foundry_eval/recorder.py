@@ -101,7 +101,19 @@ def _looks_infra(exc: BaseException) -> bool:
     status = getattr(exc, "status_code", None)
     if isinstance(status, int) and (status >= 500 or status == 429):
         return True
+    if _infra_message(str(exc)):
+        return True
     return any(hint in type(exc).__name__.lower() for hint in _INFRA_HINTS)
+
+
+# Foundry reports these inside a streamed error with no status code, so the text is the only signal. The patterns are
+# narrow on purpose: a tool's own error ("An error occurred invoking '<tool>'") is never infrastructure (D17).
+_INFRA_MESSAGE = re.compile(r"rate limit exceeded|too many requests|\[Failed Dependency\]", re.IGNORECASE)
+
+
+def _infra_message(message: str | None) -> bool:
+    text = message or ""
+    return bool(_INFRA_MESSAGE.search(text)) and not _TOOL_ERROR.search(text)
 
 
 _TOOL_ERROR = re.compile(r"An error occurred invoking '([^']+)'\s*:?\s*(.*)")
@@ -430,7 +442,7 @@ class AttemptRecorder:
             err = response.get("error") or self._error or {}
             error_type = err.get("code") or (api_status or "no_final_response")
             error_message = err.get("message")
-            infra = any(h in str(error_type).lower() for h in _INFRA_HINTS) and not tool_error
+            infra = (any(h in str(error_type).lower() for h in _INFRA_HINTS) or _infra_message(error_message)) and not tool_error
 
         meta = response or self._created
         agent = meta.get("agent") or {}

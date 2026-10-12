@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "artifacts" / "runs"
 HARNESS_VERSION = "0.1"
 FULL_OUTPUT = 400_000  # keep whole tool outputs so evaluators can trace figures
+RETRY_BACKOFF_S = (20, 60, 120)  # infrastructure errors (rate limit, tunnel, connection) are retried; every try is recorded
 
 
 def load_env() -> None:
@@ -122,7 +123,7 @@ def run_attempt(client, store: RunStore, row: Row, repeat: int) -> tuple[str, st
     agent = ARMS[arm].stub_agent_name if row.id in STUB_ROWS else ARMS[arm].agent_name
     version = store.run.environment.get("r12_agent_version") if row.id in STUB_ROWS else store.run.agent_version
     retry_of = None
-    for tries in range(2):
+    for tries in range(len(RETRY_BACKOFF_S) + 1):
         recorder = store.recorder(
             question_id=row.id,
             question=row.query,
@@ -145,9 +146,9 @@ def run_attempt(client, store: RunStore, row: Row, repeat: int) -> tuple[str, st
         except Exception as exc:
             recorder.fail(exc)
         attempt = store.add(recorder)
-        if attempt.infra_error and tries == 0:
+        if attempt.infra_error and tries < len(RETRY_BACKOFF_S):
             retry_of = attempt.attempt_id
-            time.sleep(8)
+            time.sleep(RETRY_BACKOFF_S[tries])
             continue
         break
     flag = "TOOL-ERROR" if attempt.tool_error else attempt.status
