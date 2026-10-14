@@ -223,9 +223,15 @@ def main() -> int:
     parser.add_argument("--no-evaluate", action="store_true", help="record attempts only; score later with evaluate_runs.py")
     parser.add_argument("--no-traces", action="store_true")
     parser.add_argument("--batch", default=time.strftime("%Y%m%dT%H%M%S"))
+    parser.add_argument("--resume", nargs="+", metavar="RUN_ID", help="continue stopped runs: only missing attempts run, unscored ones are scored")
     args = parser.parse_args()
 
     load_env()
+    resumed: dict[str, RunStore] = {}
+    if args.resume:
+        resumed = {s.run.arm: s for s in (RunStore.open(RUNS, run_id) for run_id in args.resume)}
+        first = next(iter(resumed.values())).run
+        args.arms, args.split, args.repeats, args.batch = list(resumed), first.dataset_split, first.repeats, first.batch_id
     args.repeats = args.repeats or int(os.environ.get("EVAL_REPEATS", "3"))
     dataset = ROOT / "evals" / "eval-dataset.jsonl"
     rows = load_dataset(dataset)
@@ -244,11 +250,15 @@ def main() -> int:
         preflight_stub()
     project = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential())
     client = project.get_openai_client()
-    stores = {arm: make_store(project, arm, args, dataset, with_stub) for arm in args.arms}
+    stores = resumed or {arm: make_store(project, arm, args, dataset, with_stub) for arm in args.arms}
 
     work = {
         arm: [(row, repeat) for row in rows for repeat in range(args.repeats) if arm in row.applies_to] for arm in args.arms
     }
+    for arm, store in resumed.items():
+        have = {(a.question_id, a.repeat_index) for a in store.attempts() if not a.infra_error}
+        work[arm] = [(row, repeat) for row, repeat in work[arm] if (row.id, repeat) not in have]
+        print(f"resume {store.run.run_id}: {len(have)} attempts recorded, {len(work[arm])} to run", flush=True)
     for arm, items in work.items():
         durations = prior_durations(arm)
         items.sort(key=lambda item, d=durations: -d.get(item[0].id, float("inf")))  # unseen questions first, then slowest
@@ -266,9 +276,9 @@ def main() -> int:
     judge_pool = ThreadPoolExecutor(max_workers=args.judge_workers)
     lock, counts = threading.Lock(), {"done": 0, "scored": 0, "score_errors": 0}
 
-    def score(store: RunStore, attempt: AttemptRecord, steps: list[StepRecord], row: Row) -> None:
+    def score(store: RunStore, attempt: AttemptRecord, steps: list[StepRecord], row: Row, only=None) -> None:
         try:
-            store.add_evaluations(evaluate_attempt(attempt, steps, row, evaluators, config, judge_model=judge_model))
+            store.add_evaluations(evaluate_attempt(attempt, steps, row, only or evaluators, config, judge_model=judge_model))
             key = "scored"
         except Exception as exc:  # a scoring failure must not stop the run; evaluate_runs.py fills the gap
             print(f"  scoring failed for {attempt.arm} {attempt.question_id}: {type(exc).__name__}: {exc}", flush=True)
@@ -286,6 +296,22 @@ def main() -> int:
             print(f"[{counts['done']}/{total}] {arm} {row.id} r{repeat}: {flag} {attempt.duration_s:.0f}s", flush=True)
 
     started = time.monotonic()
+    if evaluators is not None:
+        rows_by_id = {r.id: r for r in rows}
+        for store in resumed.values():
+            done = {(e.attempt_id, e.evaluator) for e in store.evaluations() if e.status != "error"}
+            steps_by: dict[str, list[StepRecord]] = defaultdict(list)
+            for step in store.steps():
+                steps_by[step.attempt_id].append(step)
+            backlog = 0
+            for attempt in store.attempts():
+                missing = [e for e in evaluators if (attempt.attempt_id, e.name) not in done]
+                row = rows_by_id.get(attempt.question_id)
+                if attempt.infra_error or not missing or row is None:
+                    continue
+                judge_pool.submit(score, store, attempt, sorted(steps_by[attempt.attempt_id], key=lambda s: s.index), row, missing)
+                backlog += 1
+            print(f"resume {store.run.run_id}: scoring {backlog} recorded attempts that have no results yet", flush=True)
     pools = {arm: ThreadPoolExecutor(max_workers=args.workers[arm]) for arm in args.arms}
     futures = [pools[arm].submit(job, arm, row, repeat) for arm, items in work.items() for row, repeat in items]
     wait(futures)
