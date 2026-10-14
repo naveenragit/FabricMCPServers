@@ -142,7 +142,7 @@ def main() -> int:
         baseline[item["name"].split("_")[0].upper()] = item["response"]
 
     client = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential()).get_openai_client()
-    judge_eval = make_criteria_judge(FoundryJudge(client, os.environ["FOUNDRY_JUDGE_MODEL"], args.effort or None))
+    judge_eval = make_criteria_judge(FoundryJudge(client, os.environ["FOUNDRY_JUDGE_MODEL"], args.effort or None), numeric_first=False)
     config = config_from_env(os.environ)
 
     jobs: list[tuple[str, str, Row, str, bool]] = []  # id, tag, row, text, should_pass

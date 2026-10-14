@@ -21,6 +21,7 @@ from foundry_eval.evaluators.deterministic import (
     tool_allowlist,
     trap_flags,
 )
+from foundry_eval.evaluators.judges import make_criteria_judge
 from foundry_eval.records import AttemptRecord, StepRecord
 
 MODEL_ID = "aaaaaaaa-1111-4222-8333-444444444444"
@@ -150,3 +151,43 @@ def test_numeric_audit_and_trap_flags():
     flagged = trap_flags(case(calls=[dax("EVALUATE ROW(\"x\", [Weighted Pipeline])")]))
     assert "unfiltered_weighted_pipeline" in flagged.details["flags"]
     assert trap_flags(case("sql")).status == "skipped"
+
+
+class FakeJudge:
+    def __init__(self, met=True):
+        self.calls, self.met = [], met
+
+    def complete(self, system, user):
+        self.calls.append(user)
+        ids = [line.split("id=")[1].split()[0] for line in user.splitlines() if line.startswith("- id=")]
+        body = ",".join(f'{{"id":"{i}","met":{str(self.met).lower()},"quote":"q","reason":"r"}}' for i in ids)
+        return '{"criteria":[' + body + "]}", 100, 10
+
+
+def _criteria_row(*extra):
+    fact = Criterion(id="clients", instruction="must state 3,000 clients.")
+    return with_expected(Row(id="q", set="core", category="t", query="?", criteria=[fact, *extra]))
+
+
+def test_criteria_judge_settles_found_figures_without_the_judge():
+    judge = FakeJudge()
+    out = make_criteria_judge(judge).run(case(answer="We have 3,000 clients.", row=_criteria_row()))
+    assert out.passed and not judge.calls and out.details["judge_used"] is False
+    assert out.details["criteria"]["clients"]["source"] == "numeric"
+
+
+def test_criteria_judge_asks_the_judge_only_about_what_numbers_cannot_settle():
+    trap = Criterion(id="no_sum", instruction="must not report the summed snapshots.", kind="trap", numeric=False)
+    judge = FakeJudge(met=False)
+    out = make_criteria_judge(judge).run(case(answer="We have 3,000 clients.", row=_criteria_row(trap)))
+    assert len(judge.calls) == 1 and "id=no_sum" in judge.calls[0] and "id=clients" not in judge.calls[0]
+    assert out.score == 0.5 and out.details["criteria"]["no_sum"]["source"] == "judge"
+
+
+def test_criteria_judge_sends_a_figure_it_cannot_find_to_the_judge():
+    judge = FakeJudge(met=True)
+    out = make_criteria_judge(judge).run(case(answer="We have three thousand clients.", row=_criteria_row()))
+    assert len(judge.calls) == 1 and out.passed
+    every = FakeJudge()
+    make_criteria_judge(every, numeric_first=False).run(case(answer="We have 3,000 clients.", row=_criteria_row()))
+    assert len(every.calls) == 1, "calibration mode judges every criterion"

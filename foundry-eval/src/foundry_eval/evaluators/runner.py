@@ -51,7 +51,7 @@ def evaluate_attempt(
                 label=outcome.label,
                 reason=outcome.reason[:2000],
                 details=outcome.details,
-                judge_model=judge_model if evaluator.kind == "custom_prompt" else None,
+                judge_model=judge_model if evaluator.kind == "custom_prompt" and outcome.details.get("judge_used", True) else None,
                 judge_input_tokens=outcome.judge_input_tokens,
                 judge_output_tokens=outcome.judge_output_tokens,
                 duration_s=time.perf_counter() - started,

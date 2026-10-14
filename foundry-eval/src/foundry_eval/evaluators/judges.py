@@ -2,6 +2,8 @@
 
 The judge reads the final answer, not tool output (D4), and must quote the sentence it relied on. Judge tokens
 are recorded apart from agent tokens. No temperature is sent, because reasoning deployments reject it.
+criteria_judge is numeric-first (D23): a fact criterion whose expected figures are all found in the answer is settled
+without the judge; the judge sees only the criteria left over (traps, names, rankings, and figures not found).
 """
 
 from __future__ import annotations
@@ -10,6 +12,8 @@ import time
 from typing import Any, Protocol
 
 from ..agents import POLICY_V1
+from ..dataset import Criterion
+from ..numbers import Want, extract_numbers, find_match, low_precision
 from .base import Case, Evaluator, Outcome, parse_json_object, skipped
 
 _TRANSIENT = ("getaddrinfo", "Connection", "Timeout", "RateLimit", "InternalServer", "APIConnection")
@@ -74,62 +78,95 @@ Reply with a single JSON object and nothing else:
 {{"result":true|false,"quote":"<sentence relied on>","reason":"<one short sentence>"}}"""
 
 
-def _criteria_block(case: Case) -> str:
+def _criteria_block(case: Case, ask: list[Criterion]) -> str:
+    wanted = {c.id for c in ask}
     lines = [
         f"- id={c.id} kind={c.kind} weight={c.weight}: {c.instruction}"
         for c in case.row.criteria
-        if c.weight > 0 or c.kind == "support"
+        if c.id in wanted or c.kind == "support"
     ]
     return "\n".join(lines)
 
 
-def make_criteria_judge(judge: Judge) -> Evaluator:
+def numeric_verdicts(case: Case, graded: list[Criterion]) -> dict[str, dict[str, Any]]:
+    """Fact criteria settled without the judge: every expected figure is in the answer at three or more significant figures.
+
+    Only passes are settled. A figure that is not found may still be there in a form the parser misses, so it goes to the judge.
+    """
+    numbers = extract_numbers(case.answer)
+    settled: dict[str, dict[str, Any]] = {}
+    for criterion in graded:
+        wants = [e for e in case.row.expected if e.criterion == criterion.id]
+        if criterion.kind != "fact" or not wants:
+            continue
+        found = []
+        for e in wants:
+            got = find_match(Want(e.value, e.kind, e.tol_abs, e.tol_rel, e.sign_free, e.unit), numbers)
+            if got is None or low_precision(got):
+                break
+            found.append(got.text)
+        else:
+            settled[criterion.id] = {
+                "met": True,
+                "kind": criterion.kind,
+                "quote": "; ".join(found),
+                "reason": "expected figure found in the answer",
+                "source": "numeric",
+            }
+    return settled
+
+
+def make_criteria_judge(judge: Judge, *, numeric_first: bool = True) -> Evaluator:
+    """numeric_first=False sends every criterion to the judge, as the G8 calibration needs."""
+
     def run(case: Case) -> Outcome:
         graded = [c for c in case.row.criteria if c.kind in ("fact", "trap", "behavior") and c.weight > 0]
         if not graded:
             return skipped("no scored criteria on this row")
         if not case.answer:
-            verdicts = {c.id: {"met": False, "quote": "", "reason": "no answer text"} for c in graded}
-            return Outcome(0.0, "no answer text", passed=False, details={"criteria": verdicts})
-        user = (
-            f"Question:\n{case.row.query}\n\nReference answer:\n{case.row.ground_truth or '(none; judge by the criteria)'}\n\n"
-            f"Criteria:\n{_criteria_block(case)}\n\nAssistant's final answer:\n{case.answer}"
-        )
-        text, tokens_in, tokens_out = judge.complete(CRITERIA_SYSTEM, user)
-        parsed = parse_json_object(text)
-        if parsed is None:
-            text, extra_in, extra_out = judge.complete(CRITERIA_SYSTEM, user + "\n\nReturn only the JSON object.")
+            verdicts = {c.id: {"met": False, "quote": "", "reason": "no answer text", "source": "none"} for c in graded}
+            return Outcome(0.0, "no answer text", passed=False, details={"criteria": verdicts, "judge_used": False})
+        verdicts: dict[str, Any] = numeric_verdicts(case, graded) if numeric_first else {}
+        ask = [c for c in graded if c.id not in verdicts]
+        tokens_in = tokens_out = None
+        if ask:
+            user = (
+                f"Question:\n{case.row.query}\n\nReference answer:\n{case.row.ground_truth or '(none; judge by the criteria)'}\n\n"
+                f"Criteria:\n{_criteria_block(case, ask)}\n\nAssistant's final answer:\n{case.answer}"
+            )
+            text, tokens_in, tokens_out = judge.complete(CRITERIA_SYSTEM, user)
             parsed = parse_json_object(text)
-            tokens_in = (tokens_in or 0) + (extra_in or 0)
-            tokens_out = (tokens_out or 0) + (extra_out or 0)
-        if parsed is None:
-            return Outcome(None, "the judge returned no parseable verdict", status="error", judge_input_tokens=tokens_in, judge_output_tokens=tokens_out)
-        by_id = {str(v.get("id")): v for v in parsed.get("criteria", []) if isinstance(v, dict)}
-        verdicts: dict[str, Any] = {}
-        earned = total = 0.0
-        for criterion in graded:
-            verdict = by_id.get(criterion.id)
-            met = bool(verdict and verdict.get("met") is True)
-            verdicts[criterion.id] = {
-                "met": met,
-                "kind": criterion.kind,
-                "quote": (verdict or {}).get("quote", ""),
-                "reason": (verdict or {}).get("reason", "the judge gave no verdict for this criterion"),
-            }
-            total += criterion.weight
-            earned += criterion.weight if met else 0.0
+            if parsed is None:
+                text, extra_in, extra_out = judge.complete(CRITERIA_SYSTEM, user + "\n\nReturn only the JSON object.")
+                parsed = parse_json_object(text)
+                tokens_in = (tokens_in or 0) + (extra_in or 0)
+                tokens_out = (tokens_out or 0) + (extra_out or 0)
+            if parsed is None:
+                return Outcome(None, "the judge returned no parseable verdict", status="error", judge_input_tokens=tokens_in, judge_output_tokens=tokens_out)
+            by_id = {str(v.get("id")): v for v in parsed.get("criteria", []) if isinstance(v, dict)}
+            for criterion in ask:
+                verdict = by_id.get(criterion.id)
+                verdicts[criterion.id] = {
+                    "met": bool(verdict and verdict.get("met") is True),
+                    "kind": criterion.kind,
+                    "quote": (verdict or {}).get("quote", ""),
+                    "reason": (verdict or {}).get("reason", "the judge gave no verdict for this criterion"),
+                    "source": "judge",
+                }
+        total = sum(c.weight for c in graded)
+        earned = sum(c.weight for c in graded if verdicts[c.id]["met"])
         score = earned / total
-        failed = [k for k, v in verdicts.items() if not v["met"]]
+        failed = [c.id for c in graded if not verdicts[c.id]["met"]]
         return Outcome(
             score,
             "all criteria met" if not failed else "not met: " + ", ".join(failed),
             passed=score == 1.0,
-            details={"criteria": verdicts},
+            details={"criteria": verdicts, "judge_used": bool(ask)},
             judge_input_tokens=tokens_in,
             judge_output_tokens=tokens_out,
         )
 
-    return Evaluator("criteria_judge", "custom_prompt", "accuracy", run)
+    return Evaluator("criteria_judge", "custom_prompt", "accuracy", run, version="2" if numeric_first else "1")
 
 
 def make_behavior_judge(judge: Judge) -> Evaluator:
@@ -158,4 +195,4 @@ def make_behavior_judge(judge: Judge) -> Evaluator:
     return Evaluator("behavior_judge", "custom_prompt", "risk", run)
 
 
-__all__ = ["BEHAVIOR_SYSTEM", "CRITERIA_SYSTEM", "FoundryJudge", "Judge", "make_behavior_judge", "make_criteria_judge"]
+__all__ = ["BEHAVIOR_SYSTEM", "CRITERIA_SYSTEM", "FoundryJudge", "Judge", "make_behavior_judge", "make_criteria_judge", "numeric_verdicts"]

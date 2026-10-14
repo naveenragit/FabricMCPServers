@@ -71,7 +71,7 @@ def main() -> int:
     over = runs.set_index("arm")[["agent_name", "agent_version", "agent_model", "reasoning_effort", "judge_model", "n_attempts", "n_completed", "n_failed", "n_infra_errors", "n_tool_errors"]]
     out.append(over.T.to_string())
 
-    section("Correctness (criteria_judge, core answerable rows; correct = all criteria met)")
+    section("Correctness (criteria_judge: numeric check first, LLM judge only where needed; core answerable rows; correct = all criteria met)")
     cj = ok[ok["evaluator"] == "criteria_judge"].copy()
     cj = cj.merge(attempts[["attempt_id", "tool_error"]], on="attempt_id")
     rows = []
@@ -82,6 +82,19 @@ def main() -> int:
     if len(audit):
         a = audit.groupby("arm")["score"].apply(lambda s: (s == 1.0).mean())
         out.append("\nnumeric_audit (deterministic; all expected figures found): " + ", ".join(f"{k}={pct(v)}" for k, v in a.items()))
+
+    def sources(details: object) -> list[str]:
+        crit = (details or {}).get("criteria", {}) if isinstance(details, dict) else {}
+        return [str(v.get("source", "judge")) for v in crit.values()]
+
+    if len(cj):
+        src = cj["details"].map(sources)
+        judged = int(cj["details"].map(lambda d: (d or {}).get("judge_used", True) if isinstance(d, dict) else True).sum())
+        numeric = sum(s.count("numeric") for s in src)
+        total_c = sum(len(s) for s in src)
+        out.append(
+            f"LLM judge needed on {judged} of {len(cj)} scored attempts; {numeric} of {total_c} criteria settled by the numeric check"
+        )
 
     def precision_only(details: object) -> bool:
         crit = (details or {}).get("criteria", {}) if isinstance(details, dict) else {}

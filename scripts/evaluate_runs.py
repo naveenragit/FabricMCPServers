@@ -1,8 +1,9 @@
-"""Evaluate stored runs: local evaluators (deterministic + judges) and the Foundry cloud built-ins.
+"""Evaluate stored runs: local evaluators (deterministic + judges) and, on request, the Foundry cloud built-ins.
 
-Run: .\.venv\Scripts\python.exe scripts\evaluate_runs.py <run_id> [<run_id> ...] [--no-cloud] [--no-local] [--workers 6]
+Run: .\.venv\Scripts\python.exe scripts\evaluate_runs.py <run_id> [<run_id> ...] [--cloud] [--no-local] [--workers 6]
     [--cloud-batch 5] [--cloud-workers 5]
-Cloud built-ins go in runs of --cloud-batch responses, at most --cloud-workers runs at a time, so the service is not flooded.
+The LLM judge runs only where the deterministic checks cannot decide (D23). The cloud built-ins are LLM-judged and
+optional (--cloud); they go in runs of --cloud-batch responses, at most --cloud-workers runs at a time.
 Trace join (Foundry spans for tool errors) is separate: python -m foundry_eval traces artifacts/runs <run_id>
 """
 
@@ -41,7 +42,7 @@ def load_env() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_ids", nargs="+")
-    parser.add_argument("--no-cloud", action="store_true")
+    parser.add_argument("--cloud", action="store_true", help="also run the Foundry cloud built-ins (LLM-judged)")
     parser.add_argument("--no-local", action="store_true")
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--cloud-batch", type=int, default=5, help="responses per cloud eval run")
@@ -68,19 +69,20 @@ def main() -> int:
             def local(attempt, store=store, steps=steps, done=done):
                 row = rows.get(attempt.question_id)
                 if row is None:
-                    return 0
+                    return []
                 wanted = [e for e in evaluators if (attempt.attempt_id, e.name) not in done]
                 records = evaluate_attempt(
                     attempt, sorted(steps.get(attempt.attempt_id, []), key=lambda s: s.index), row, wanted, config, judge_model=judge_model
                 )
                 store.add_evaluations(records)
-                return len(records)
+                return records
 
             with ThreadPoolExecutor(max_workers=args.workers) as pool:
                 scoreable = [a for a in store.attempts() if not a.infra_error]  # infrastructure errors are not scored
-                total = sum(pool.map(local, scoreable))
-            print(f"   local evaluators: {total} results", flush=True)
-        if not args.no_cloud:
+                results = [r for batch in pool.map(local, scoreable) for r in batch]
+            judged = sum(1 for r in results if r.judge_input_tokens is not None)
+            print(f"   local evaluators: {len(results)} results, {judged} needed an LLM judge call", flush=True)
+        if args.cloud:
             records, failures = evaluate_run_in_cloud(
                 client,
                 store,
