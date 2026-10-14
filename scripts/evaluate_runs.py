@@ -1,6 +1,8 @@
 """Evaluate stored runs: local evaluators (deterministic + judges) and the Foundry cloud built-ins.
 
 Run: .\.venv\Scripts\python.exe scripts\evaluate_runs.py <run_id> [<run_id> ...] [--no-cloud] [--no-local] [--workers 6]
+    [--cloud-batch 5] [--cloud-workers 5]
+Cloud built-ins go in runs of --cloud-batch responses, at most --cloud-workers runs at a time, so the service is not flooded.
 Trace join (Foundry spans for tool errors) is separate: python -m foundry_eval traces artifacts/runs <run_id>
 """
 
@@ -14,6 +16,7 @@ from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
 from azure.identity import AzureCliCredential
+
 from foundry_eval import RunStore
 from foundry_eval.cloud import BUILTINS, evaluate_run_in_cloud
 from foundry_eval.dataset import load_dataset
@@ -41,6 +44,8 @@ def main() -> int:
     parser.add_argument("--no-cloud", action="store_true")
     parser.add_argument("--no-local", action="store_true")
     parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument("--cloud-batch", type=int, default=5, help="responses per cloud eval run")
+    parser.add_argument("--cloud-workers", type=int, default=5, help="cloud eval runs in flight at once")
     args = parser.parse_args()
 
     load_env()
@@ -53,7 +58,7 @@ def main() -> int:
 
     for run_id in args.run_ids:
         store = RunStore.open(ROOT / "artifacts" / "runs", run_id)
-        print(f"== {run_id}: {len(store.attempts())} attempts")
+        print(f"== {run_id}: {len(store.attempts())} attempts", flush=True)
         if not args.no_local:
             steps: dict[str, list] = {}
             for step in store.steps():
@@ -74,13 +79,21 @@ def main() -> int:
             with ThreadPoolExecutor(max_workers=args.workers) as pool:
                 scoreable = [a for a in store.attempts() if not a.infra_error]  # infrastructure errors are not scored
                 total = sum(pool.map(local, scoreable))
-            print(f"   local evaluators: {total} results")
+            print(f"   local evaluators: {total} results", flush=True)
         if not args.no_cloud:
-            records, failures = evaluate_run_in_cloud(client, store, judge_model, CLOUD, workers=args.workers)
+            records, failures = evaluate_run_in_cloud(
+                client,
+                store,
+                judge_model,
+                CLOUD,
+                batch_size=args.cloud_batch,
+                workers=args.cloud_workers,
+                progress=lambda line: print(line, flush=True),
+            )
             ok = sum(r.status == "ok" for r in records)
-            print(f"   cloud built-ins: {ok}/{len(records)} ok, {len(failures)} evaluators failed")
+            print(f"   cloud built-ins: {ok}/{len(records)} ok, {len(failures)} evaluators with failed batches", flush=True)
             for short, message in failures.items():
-                print(f"     FAILED {short}: {message}")
+                print(f"     FAILED {short}: {message}", flush=True)
     return 0
 
 

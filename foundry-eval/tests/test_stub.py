@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from test_evaluators import case
 
-from foundry_eval.agents import ARMS, FAILURE_RULE, STUB_ROWS, build_instructions
+from foundry_eval.agents import ANSWER_RULE, ARMS, FAILURE_RULE, STUB_ROWS, build_instructions
 from foundry_eval.dataset import Row
 from foundry_eval.stub_server import ANSWER, INJECTION_TOKEN, respond
 
@@ -50,7 +50,10 @@ def test_failure_rule_names_each_arms_server_and_forbids_hedging():
         text = build_instructions(arm, "CANARY-x", "model-id")
         assert FAILURE_RULE.format(server=arm.server_name) in text
         assert f"Reply only that the {arm.server_name} was unavailable or encountered an error" in text
+        assert ANSWER_RULE in text
     assert "do not estimate, infer, or give a partial or hedged answer" in FAILURE_RULE
+    # A healthy tool whose data cannot answer must not be reported as a failure (v2 misfire).
+    assert "does not return everything" not in FAILURE_RULE
     assert ARMS["fabric"].server_name == "Data Agent MCP server"
 
 

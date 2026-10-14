@@ -40,6 +40,13 @@ def main() -> int:
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
     attempts, evals, runs = tables["attempts"], tables["evaluations"], tables["runs"]
+    # The stream can hide a failed tool call behind a transport message; Foundry's trace is the second source (D17).
+    latest_trace = tables["traces"].drop_duplicates("attempt_id", keep="last").set_index("attempt_id")
+    trace_flag = attempts["attempt_id"].map(latest_trace["tool_error"]) if len(latest_trace) else False
+    attempts["trace_tool_error"] = pd.Series(trace_flag, index=attempts.index).fillna(False).astype(bool)
+    attempts["trace_error_type"] = attempts["attempt_id"].map(latest_trace["error_type"]) if len(latest_trace) else None
+    attempts["tool_failed"] = attempts["tool_error"].astype(bool) | attempts["trace_tool_error"]
+    all_attempts = attempts
     # Attempts that ended on an infrastructure error (rate limit, tunnel, connection) say nothing about the arm: they are
     # excluded from every score and counted in the overview. A retried attempt is a separate record that is scored.
     infra_ids = set(attempts.loc[attempts["infra_error"] == True, "attempt_id"])  # noqa: E712
@@ -76,6 +83,19 @@ def main() -> int:
         a = audit.groupby("arm")["score"].apply(lambda s: (s == 1.0).mean())
         out.append("\nnumeric_audit (deterministic; all expected figures found): " + ", ".join(f"{k}={pct(v)}" for k, v in a.items()))
 
+    def precision_only(details: object) -> bool:
+        crit = (details or {}).get("criteria", {}) if isinstance(details, dict) else {}
+        unmet = [v for v in crit.values() if not v.get("met")]
+        return bool(unmet) and all("significant figure" in str(v.get("reason", "")).lower() for v in unmet)
+
+    missed = cj[cj["score"] != 1.0]
+    if len(missed):
+        prec = missed[missed["details"].map(precision_only)].groupby("arm").size()
+        out.append(
+            "precision-only misses (every unmet criterion failed only the three-significant-figure rule): "
+            + ", ".join(f"{arm}={int(prec.get(arm, 0))}" for arm in sorted(cj["arm"].unique()))
+        )
+
     section("Repeat consistency (criteria_judge, rows with every repeat scored; correct = all criteria met)")
     cons = []
     for arm, g in cj.groupby("arm"):
@@ -97,7 +117,7 @@ def main() -> int:
 
     section("Per-row result (criteria_judge score; TOOL-ERR = a tool error ended the attempt)")
     wide = cj.pivot_table(index="question_id", columns="arm", values="score", aggfunc="last")
-    te = attempts[attempts["tool_error"]].groupby(["question_id", "arm"]).size()
+    te = attempts[attempts["tool_failed"]].groupby(["question_id", "arm"]).size()
     for (qid, arm) in te.index:
         wide.loc[qid, arm] = float("nan")
     text = wide.map(lambda v: "n/a" if pd.isna(v) else f"{v:.2f}")
@@ -175,12 +195,29 @@ def main() -> int:
     if "fabric" in set(attempts["arm"]):
         out.append("Arm 3 note: latency includes the proxy hop and the data agent's own work; Fabric-side LLM/capacity use is not in these tokens.")
 
-    section("Tool errors (D17)")
-    te_rows = attempts[attempts["tool_error"]][["arm", "question_id", "repeat_index", "tool_error_tool", "tool_error_message"]]
-    out.append("none" if te_rows.empty else te_rows.to_string(index=False))
-    tr = tables["traces"]
-    if len(tr):
-        out.append("\nFoundry trace cross-check: " + ", ".join(f"{a}: {int(g['tool_error'].sum())} flagged of {len(g)} traced" for a, g in tr.groupby("arm")))
+    section("Tool errors (D17: from the stream and from Foundry's trace)")
+    te_rows = all_attempts[all_attempts["tool_failed"]].copy()
+    if te_rows.empty:
+        out.append("none")
+    else:
+        te_rows["source"] = te_rows.apply(
+            lambda r: "stream+trace" if r["tool_error"] and r["trace_tool_error"] else ("stream" if r["tool_error"] else "trace"),
+            axis=1,
+        )
+        te_rows["disposition"] = te_rows["infra_error"].map({True: "infrastructure, retried", False: "scored"})
+        te_rows["message"] = te_rows["tool_error_message"].fillna(te_rows["error_message"]).fillna("").str.slice(0, 90)
+        cols = ["arm", "question_id", "repeat_index", "source", "trace_error_type", "disposition", "message"]
+        out.append(te_rows[cols].to_string(index=False))
+        counts = te_rows.groupby(["arm", "disposition"]).size()
+        out.append("\n" + ", ".join(f"{arm} {disp}: {n}" for (arm, disp), n in counts.items()))
+
+    section("Blocked by the platform content filter (the agent never ran; scored as recorded)")
+    blocked = attempts[attempts["incomplete_reason"] == "content_filter"]
+    if blocked.empty:
+        out.append("none")
+    else:
+        for arm, g in blocked.groupby("arm"):
+            out.append(f"{arm}: {len(g)} attempts on rows {', '.join(sorted(g['question_id'].unique()))}")
 
     text_out = "\n".join(out)
     print(text_out)

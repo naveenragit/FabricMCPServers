@@ -30,6 +30,7 @@ _INFRA_HINTS = (
     "server_error",
     "internalserver",
     "unavailable",
+    "no_final_response",
 )
 
 _SPAN_END_EVENTS = frozenset(
@@ -107,10 +108,9 @@ def _looks_infra(exc: BaseException) -> bool:
 
 
 # Foundry reports these inside a streamed error with no status code, so the text is the only signal. The patterns are
-# narrow on purpose: a tool's own error ("An error occurred invoking '<tool>'") is never infrastructure (D17).
-_INFRA_MESSAGE = re.compile(
-    r"rate limit exceeded|too many requests|\[Failed Dependency\]|model deployment encountered an error", re.IGNORECASE
-)
+# narrow on purpose: a tool's own error ("An error occurred invoking '<tool>'") is never infrastructure (D17), and nor is
+# "The model deployment encountered an error", which Foundry's trace showed to be a tool_server_error.
+_INFRA_MESSAGE = re.compile(r"rate limit exceeded|too many requests|\[Failed Dependency\]", re.IGNORECASE)
 
 
 def _infra_message(message: str | None) -> bool:

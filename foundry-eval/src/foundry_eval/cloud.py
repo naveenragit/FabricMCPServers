@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 
@@ -46,18 +46,7 @@ def _retry(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     raise AssertionError("unreachable")
 
 
-def run_builtin_evaluation(
-    client: Any,
-    attempts: list[AttemptRecord],
-    judge_model: str,
-    evaluators: dict[str, str] | None = None,
-    *,
-    name: str = "wm-eval",
-    poll_s: float = 10.0,
-    timeout_s: float = 1800.0,
-) -> tuple[str, str, str, list[dict[str, Any]]]:
-    """Create one eval with every evaluator and run it over the attempts' response ids; return (eval, run, status, items)."""
-    evaluators = evaluators or BUILTINS
+def create_builtin_eval(client: Any, judge_model: str, evaluators: dict[str, str], *, name: str) -> str:
     criteria = [
         {
             "type": "azure_ai_evaluator",
@@ -73,9 +62,25 @@ def run_builtin_evaluation(
         data_source_config={"type": "azure_ai_source", "scenario": "responses"},
         testing_criteria=criteria,
     )
+    return ev.id
+
+
+def run_batch(
+    client: Any,
+    eval_id: str,
+    attempts: list[AttemptRecord],
+    *,
+    name: str,
+    poll_s: float = 10.0,
+    timeout_s: float = 900.0,
+) -> tuple[str, str, list[dict[str, Any]]]:
+    """Run an existing eval over these attempts' response ids; return (run id, status, output items).
+
+    A run still going at the deadline is cancelled and reported as "timeout", so nothing is left queued in the project.
+    """
     run = _retry(
         client.evals.runs.create,
-        eval_id=ev.id,
+        eval_id=eval_id,
         name=name,
         data_source={
             "type": "azure_ai_responses",
@@ -91,9 +96,15 @@ def run_builtin_evaluation(
     )
     deadline = time.monotonic() + timeout_s
     while True:
-        run = _retry(client.evals.runs.retrieve, run.id, eval_id=ev.id)
-        if run.status in ("completed", "failed", "canceled") or time.monotonic() > deadline:
+        run = _retry(client.evals.runs.retrieve, run.id, eval_id=eval_id)
+        if run.status in ("completed", "failed", "canceled"):
             break
+        if time.monotonic() > deadline:
+            try:
+                client.evals.runs.cancel(run.id, eval_id=eval_id)
+            except Exception:  # noqa: BLE001 - best effort; the timeout is reported either way
+                pass
+            return run.id, "timeout", []
         time.sleep(poll_s)
     items: list[dict[str, Any]] = []
     if run.status == "completed":
@@ -102,12 +113,12 @@ def run_builtin_evaluation(
         for _ in range(8):
             items = [
                 i.model_dump(mode="json")
-                for i in _retry(lambda: list(client.evals.runs.output_items.list(run.id, eval_id=ev.id)))
+                for i in _retry(lambda: list(client.evals.runs.output_items.list(run.id, eval_id=eval_id)))
             ]
             if len(items) >= expected:
                 break
             time.sleep(poll_s)
-    return ev.id, run.id, run.status, items
+    return run.id, run.status, items
 
 
 def records_from_items(
@@ -165,10 +176,15 @@ def evaluate_run_in_cloud(
     judge_model: str,
     evaluators: dict[str, str] | None = None,
     *,
-    workers: int = 6,
+    batch_size: int = 5,
+    workers: int = 5,
+    timeout_s: float = 900.0,
+    progress: Callable[[str], None] | None = None,
 ) -> tuple[list[EvaluationRecord], dict[str, str]]:
-    """One cloud eval per evaluator, in parallel, so a failure in one cannot hide the others.
+    """One cloud eval per evaluator, run over the responses in batches, so no single run is large.
 
+    Each evaluator gets one eval definition; its pending responses go to it in runs of `batch_size`, with at most
+    `workers` runs in flight across all evaluators. A failed batch is reported and does not stop the others.
     Only finished attempts without a tool error are sent (the others have no complete response to judge), and only the
     evaluator/attempt pairs that have no result yet, so a re-run fills gaps. Returns the records and failures by evaluator.
     """
@@ -182,29 +198,45 @@ def evaluate_run_in_cloud(
     if not work:
         return [], {}
 
-    def one(short: str) -> list[EvaluationRecord]:
-        attempts = work[short]
-        eval_id, run_id, status, items = run_builtin_evaluation(
-            client, attempts, judge_model, {short: evaluators[short]}, name=f"{store.run.run_id}:{short}"
+    run_name = store.run.run_id
+    eval_ids = {short: create_builtin_eval(client, judge_model, {short: evaluators[short]}, name=f"{run_name}:{short}") for short in work}
+    jobs = [
+        (short, index, attempts[start : start + batch_size])
+        for short, attempts in work.items()
+        for index, start in enumerate(range(0, len(attempts), batch_size))
+    ]
+
+    def one(job: tuple[str, int, list[AttemptRecord]]) -> list[EvaluationRecord]:
+        short, index, batch = job
+        run_id, status, items = run_batch(
+            client, eval_ids[short], batch, name=f"{run_name}:{short}:{index}", timeout_s=timeout_s
         )
         if status != "completed":
-            raise RuntimeError(f"cloud run {run_id} ended with status {status!r}")
-        records = records_from_items(items, attempts, judge_model, eval_id, run_id, {short: evaluators[short]})
+            raise RuntimeError(f"batch {index} (run {run_id}) ended with status {status!r}")
+        records = records_from_items(items, batch, judge_model, eval_ids[short], run_id, {short: evaluators[short]})
         got = len({r.attempt_id for r in records})
-        if got < len(attempts):
-            raise RuntimeError(f"cloud run {run_id} returned results for {got} of {len(attempts)} attempts")
+        if got < len(batch):
+            raise RuntimeError(f"batch {index} (run {run_id}) returned results for {got} of {len(batch)} attempts")
         return records
 
     records: list[EvaluationRecord] = []
-    failures: dict[str, str] = {}
+    errors: dict[str, list[str]] = {}
+    finished = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {short: pool.submit(one, short) for short in work}
-        for short, future in futures.items():
+        futures = {pool.submit(one, job): job for job in jobs}
+        for future in as_completed(futures):
+            short, index, _ = futures[future]
+            finished += 1
             try:
                 found = future.result()
             except Exception as exc:
-                failures[short] = f"{type(exc).__name__}: {exc}"[:300]
-                continue
-            store.add_evaluations(found)
-            records += found
+                errors.setdefault(short, []).append(f"{type(exc).__name__}: {exc}"[:200])
+                outcome = "FAILED"
+            else:
+                store.add_evaluations(found)
+                records += found
+                outcome = "ok"
+            if progress:
+                progress(f"   cloud batch {finished}/{len(jobs)}: {short} #{index} {outcome}")
+    failures = {short: f"{len(msgs)} batch(es) failed; first: {msgs[0]}" for short, msgs in errors.items()}
     return records, failures

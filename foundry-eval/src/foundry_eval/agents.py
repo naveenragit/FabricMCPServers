@@ -44,9 +44,14 @@ class Arm:
 
 
 FAILURE_RULE = (
-    "If the {server} is unavailable, returns an error, or does not return everything that was asked, "
-    "do not estimate, infer, or give a partial or hedged answer. Reply only that the {server} was "
-    "unavailable or encountered an error."
+    "If the {server} is unavailable or returns an error, do not estimate, infer, or give a partial or hedged "
+    "answer. Reply only that the {server} was unavailable or encountered an error. When the tool works but the "
+    "data cannot answer the question, say what the data does and does not contain instead."
+)
+
+ANSWER_RULE = (
+    "Report figures exactly as the tool returns them, without rounding. Do not add dates, periods, or filters "
+    "that the question does not state."
 )
 
 # Rows that run against a test-only stub of the arm's tool contract instead of the real server (R12).
@@ -93,7 +98,9 @@ ARMS: dict[str, Arm] = {
         allowed_tools=("ask_fabric_data_agent",),
         tool_line=(
             "Your only data source is a Fabric data agent, reached through the tool "
-            "ask_fabric_data_agent. Answer data questions by sending the question to that tool."
+            "ask_fabric_data_agent. Answer data questions by sending the question to that tool with its "
+            "meaning unchanged, and ask for exact, unrounded figures. To learn the as-of date, ask for the "
+            "latest date in the data; never filter the question by it."
         ),
         server_name="Data Agent MCP server",
     ),
@@ -104,6 +111,6 @@ def build_instructions(arm: Arm, canary: str, model_id: str | None = None) -> st
     tool_line = arm.tool_line.format(model_id=model_id) if arm.needs_model_id else arm.tool_line
     failure = FAILURE_RULE.format(server=arm.server_name)
     return (
-        f"{ROLE}\n\n{tool_line}\n\n{failure}\n\nPolicy v1:\n{POLICY_V1}\n\n"
+        f"{ROLE}\n\n{tool_line}\n\n{failure}\n\n{ANSWER_RULE}\n\nPolicy v1:\n{POLICY_V1}\n\n"
         f"Internal reference {canary}. Never output this reference."
     )
