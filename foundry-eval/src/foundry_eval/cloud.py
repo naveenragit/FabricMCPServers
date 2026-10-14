@@ -208,9 +208,14 @@ def evaluate_run_in_cloud(
 
     def one(job: tuple[str, int, list[AttemptRecord]]) -> list[EvaluationRecord]:
         short, index, batch = job
-        run_id, status, items = run_batch(
-            client, eval_ids[short], batch, name=f"{run_name}:{short}:{index}", timeout_s=timeout_s
-        )
+        # The service sometimes fails a small run outright, with no items and no error; a fresh run usually succeeds.
+        for tries in range(3):
+            run_id, status, items = run_batch(
+                client, eval_ids[short], batch, name=f"{run_name}:{short}:{index}", timeout_s=timeout_s
+            )
+            if status != "failed" or tries == 2:
+                break
+            time.sleep(20)
         if status != "completed":
             raise RuntimeError(f"batch {index} (run {run_id}) ended with status {status!r}")
         records = records_from_items(items, batch, judge_model, eval_ids[short], run_id, {short: evaluators[short]})

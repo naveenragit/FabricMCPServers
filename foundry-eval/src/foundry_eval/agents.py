@@ -50,8 +50,9 @@ FAILURE_RULE = (
 )
 
 ANSWER_RULE = (
-    "Report figures exactly as the tool returns them, without rounding. Do not add dates, periods, or filters "
-    "that the question does not state."
+    "Give figures in full, without rounding to thousands, millions, or billions: money to the cent and other "
+    "values to at least four significant figures. Do not add dates, periods, or filters that the question does "
+    "not state."
 )
 
 # Rows that run against a test-only stub of the arm's tool contract instead of the real server (R12).

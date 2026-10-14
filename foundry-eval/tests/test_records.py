@@ -208,6 +208,16 @@ def test_rate_limit_and_failed_dependency_are_infra_but_a_tool_error_is_not():
     assert not attempt_for("The model deployment encountered an error processing your request. You can retry.").infra_error
 
 
+def test_a_408_from_foundry_is_a_retried_timeout():
+    class Status408(Exception):
+        status_code = 408
+
+    rec = AttemptRecorder(run_id="r1", arm="fabric", question_id="q", question="?")
+    rec.fail(Status408("Error code: 408 - The operation was timeout."))
+    attempt, _ = rec.build()
+    assert (attempt.status, attempt.infra_error) == ("timeout", True)
+
+
 def test_non_streaming_records_totals_only_and_accepts_sdk_style_models():
     rec = AttemptRecorder(run_id="r1", arm="sql", question_id="q02", question="?")
     rec.record_response(

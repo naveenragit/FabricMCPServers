@@ -12,8 +12,9 @@ from foundry_eval.records import AttemptRecord
 
 
 class FakeEvals:
-    def __init__(self, stuck: bool = False) -> None:
+    def __init__(self, stuck: bool = False, fail_first: int = 0) -> None:
         self.stuck = stuck
+        self.fail_first = fail_first
         self.batches: list[list[str]] = []
         self.cancelled: list[str] = []
         self.in_flight = self.peak = 0
@@ -41,6 +42,9 @@ class FakeEvals:
             return SimpleNamespace(id=run_id, status="in_progress")
         with self._lock:
             self.in_flight -= 1
+            if self.fail_first:
+                self.fail_first -= 1
+                return SimpleNamespace(id=run_id, status="failed")
         return SimpleNamespace(id=run_id, status="completed")
 
     def _cancel(self, run_id, eval_id):
@@ -94,3 +98,12 @@ def test_a_stuck_batch_is_cancelled_and_reported(tmp_path):
     )
     assert records == [] and "timeout" in failures["relevance"]
     assert evals.cancelled == ["run-0"]
+
+
+def test_a_run_the_service_fails_outright_is_retried(tmp_path, monkeypatch):
+    monkeypatch.setattr("foundry_eval.cloud.time.sleep", lambda s: None)
+    store = store_with(tmp_path, 3)
+    evals = FakeEvals(fail_first=1)
+    records, failures = evaluate_run_in_cloud(SimpleNamespace(evals=evals), store, "judge", {"relevance": "quality"})
+    assert failures == {} and len(records) == 3
+    assert len(evals.batches) == 2, "one failed run, then one fresh run"

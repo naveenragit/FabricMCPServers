@@ -273,11 +273,12 @@ class AttemptRecorder:
         A tool error is not an infrastructure failure: Foundry raises it when an MCP tool returns an error
         result, and ends the response without letting the model see it.
         """
-        timed_out = isinstance(exc, TimeoutError) or "timeout" in type(exc).__name__.lower()
+        status = getattr(exc, "status_code", None)
+        timed_out = isinstance(exc, TimeoutError) or "timeout" in type(exc).__name__.lower() or status == 408
         message = str(exc)
         self._tool_error = _tool_error_from_message(message)
         if infra is None:
-            infra = False if self._tool_error else _looks_infra(exc)
+            infra = False if self._tool_error else (timed_out or _looks_infra(exc))
         self._exception = (type(exc).__name__, message, timed_out, infra)
         if self._t_end is None:
             self._t_end = self._elapsed()

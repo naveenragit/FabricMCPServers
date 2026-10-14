@@ -11,11 +11,13 @@ import argparse
 import os
 import secrets
 import sys
+import time
 from pathlib import Path
 
 import requests
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import MCPTool, PromptAgentDefinition, Reasoning
+from azure.core.exceptions import HttpResponseError
 from azure.identity import AzureCliCredential
 
 from foundry_eval.agents import ARMS, build_instructions
@@ -71,6 +73,18 @@ def put_connection(credential: AzureCliCredential, name: str, target: str) -> No
         sys.exit(f"connection PUT failed {resp.status_code}: {resp.text}")
 
 
+def create_version(project: AIProjectClient, agent_name: str, definition: PromptAgentDefinition):
+    # The service intermittently answers create_version with (Timeout) and succeeds on a retry.
+    for attempt in range(3):
+        try:
+            return project.agents.create_version(agent_name=agent_name, definition=definition)
+        except HttpResponseError as exc:
+            if attempt == 2 or "timeout" not in str(exc).lower():
+                raise
+            time.sleep(15)
+    raise AssertionError("unreachable")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--arms", nargs="+", default=["dax", "sql"], choices=sorted(ARMS))
@@ -114,7 +128,7 @@ def main() -> int:
             tools=[tool],
             reasoning=Reasoning(effort=effort) if effort else None,
         )
-        version = project.agents.create_version(agent_name=agent_name, definition=definition)
+        version = create_version(project, agent_name, definition)
         print(f"{agent_name}: version {version.version} (connection {connection})")
     return 0
 
