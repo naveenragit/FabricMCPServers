@@ -191,3 +191,12 @@ def test_criteria_judge_sends_a_figure_it_cannot_find_to_the_judge():
     every = FakeJudge()
     make_criteria_judge(every, numeric_first=False).run(case(answer="We have 3,000 clients.", row=_criteria_row()))
     assert len(every.calls) == 1, "calibration mode judges every criterion"
+
+
+def test_criteria_judge_leaves_ranked_and_swappable_figures_to_the_judge():
+    ranked = Criterion(id="top", instruction="must identify Phone as the highest channel, about 7.150.")
+    other = Criterion(id="advisors", instruction="must state 40 advisors.")
+    judge = FakeJudge()
+    out = make_criteria_judge(judge).run(case(answer="Phone 7.150; 3,000 clients; 40 advisors.", row=_criteria_row(ranked, other)))
+    sources = {k: v["source"] for k, v in out.details["criteria"].items()}
+    assert sources == {"clients": "judge", "advisors": "judge", "top": "judge"}, "two counts could be swapped; a ranked figure needs its name"

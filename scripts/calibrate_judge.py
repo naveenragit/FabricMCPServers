@@ -22,7 +22,7 @@ from foundry_eval.dataset import Row, load_dataset
 from foundry_eval.evaluators import config_from_env
 from foundry_eval.evaluators.base import Case
 from foundry_eval.evaluators.deterministic import numeric_audit
-from foundry_eval.evaluators.judges import FoundryJudge, make_criteria_judge
+from foundry_eval.evaluators.judges import FoundryJudge, make_criteria_judge, numeric_verdicts
 from foundry_eval.net import install_dns_retry
 from foundry_eval.numbers import extract_numbers
 from foundry_eval.records import AttemptRecord
@@ -164,7 +164,8 @@ def main() -> int:
     def score(job):
         rid, tag, row, text, should_pass = job
         case = Case(row=row, attempt=attempt_for(row, text, tag), steps=[], config=config)
-        return job, judge_eval.run(case), numeric_audit(case)
+        graded = [c for c in row.criteria if c.kind in ("fact", "trap", "behavior") and c.weight > 0]
+        return job, judge_eval.run(case), numeric_audit(case), set(numeric_verdicts(case, graded))
 
     results = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -174,7 +175,7 @@ def main() -> int:
                 print(f"  scored {i}/{len(jobs)}", flush=True)
 
     out = []
-    for (rid, tag, row, text, should_pass), judged, audit in results:
+    for (rid, tag, row, text, should_pass), judged, audit, settled in results:
         verdicts = (judged.details or {}).get("criteria", {})
         numeric_ids = {e.criterion for e in row.expected}
         audit_vals = (audit.details or {}).get("values", {})
@@ -187,6 +188,9 @@ def main() -> int:
             "judge_failed": [k for k, v in verdicts.items() if not v.get("met")],
             "audit_score": audit.score, "audit_failed": [c for c, ok in crit_audit.items() if ok is False],
             "numeric_criteria": sorted(numeric_ids), "verdicts": verdicts, "text": text if tag != "baseline" else None,
+            # Production scoring (D23): criteria the numeric check settles are met; the judge decides the rest.
+            "numeric_settled": sorted(settled),
+            "hybrid_failed": [k for k, v in verdicts.items() if not v.get("met") and k not in settled],
         })
     dest = ROOT / "artifacts" / "evaluation" / "judge-calibration.json"
     dest.write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
@@ -214,6 +218,12 @@ def main() -> int:
     print(f"seeded wrong answers scored: {len(seeded)}; judge rejected: {len(seeded) - len(false_pass)} ({100 * (len(seeded) - len(false_pass)) / max(len(seeded), 1):.1f}%)")
     print(f"false-pass (seeded accepted): {len(false_pass)} -> {false_pass}")
     print(f"criterion-level agreement with numeric_audit: {agree}/{total} ({100 * agree / max(total, 1):.1f}%)")
+    h_fail = [o["id"] for o in base if o["hybrid_failed"]]
+    h_pass = [f"{o['id']}:{o['variant']}" for o in seeded if not o["hybrid_failed"]]
+    print(f"numeric-first scoring (D23): false-fail {len(h_fail)} -> {h_fail}; false-pass {len(h_pass)} -> {h_pass}")
+    settled_n = sum(len(o["numeric_settled"]) for o in scored)
+    graded_n = sum(len(o["verdicts"]) for o in scored)
+    print(f"criteria the numeric check settles without the judge: {settled_n}/{graded_n}")
     print(f"errors: {[o['id'] for o in out if o['judge_status'] != 'ok']}")
     print(f"detail -> {dest.relative_to(ROOT)}")
     return 0

@@ -8,7 +8,9 @@ without the judge; the judge sees only the criteria left over (traps, names, ran
 
 from __future__ import annotations
 
+import re
 import time
+from collections import Counter
 from typing import Any, Protocol
 
 from ..agents import POLICY_V1
@@ -88,31 +90,35 @@ def _criteria_block(case: Case, ask: list[Criterion]) -> str:
     return "\n".join(lines)
 
 
-def numeric_verdicts(case: Case, graded: list[Criterion]) -> dict[str, dict[str, Any]]:
-    """Fact criteria settled without the judge: every expected figure is in the answer at three or more significant figures.
+# A figure tied to a name, rank or order can be present yet attached to the wrong item; only the judge can see that.
+_LABEL_TIED = re.compile(r"\b(identify|names?|named|list|in order|rank\w*|top|highest|lowest|largest|smallest|most|least|leader|show)\b|'s\b", re.IGNORECASE)
 
-    Only passes are settled. A figure that is not found may still be there in a form the parser misses, so it goes to the judge.
+
+def numeric_verdicts(case: Case, graded: list[Criterion]) -> dict[str, dict[str, Any]]:
+    """Fact criteria settled without the judge: the expected figure is in the answer at three or more significant figures.
+
+    Only a criterion asking for one standalone figure is settled: not one tied to a name, rank or order, and not one whose
+    row expects another figure of the same kind, which the answer could swap with it. Only passes are settled; a figure
+    that is not found may be there in a form the parser misses, so it goes to the judge.
     """
     numbers = extract_numbers(case.answer)
+    kinds = Counter(e.kind for e in case.row.expected)
     settled: dict[str, dict[str, Any]] = {}
     for criterion in graded:
         wants = [e for e in case.row.expected if e.criterion == criterion.id]
-        if criterion.kind != "fact" or not wants:
+        if criterion.kind != "fact" or len(wants) != 1 or kinds[wants[0].kind] > 1 or _LABEL_TIED.search(criterion.instruction):
             continue
-        found = []
-        for e in wants:
-            got = find_match(Want(e.value, e.kind, e.tol_abs, e.tol_rel, e.sign_free, e.unit), numbers)
-            if got is None or low_precision(got):
-                break
-            found.append(got.text)
-        else:
-            settled[criterion.id] = {
-                "met": True,
-                "kind": criterion.kind,
-                "quote": "; ".join(found),
-                "reason": "expected figure found in the answer",
-                "source": "numeric",
-            }
+        e = wants[0]
+        got = find_match(Want(e.value, e.kind, e.tol_abs, e.tol_rel, e.sign_free, e.unit), numbers)
+        if got is None or low_precision(got):
+            continue
+        settled[criterion.id] = {
+            "met": True,
+            "kind": criterion.kind,
+            "quote": got.text,
+            "reason": "expected figure found in the answer",
+            "source": "numeric",
+        }
     return settled
 
 
