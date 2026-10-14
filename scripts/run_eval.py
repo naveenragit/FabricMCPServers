@@ -44,9 +44,9 @@ RUNS = ROOT / "artifacts" / "runs"
 HARNESS_VERSION = "0.2"
 FULL_OUTPUT = 400_000  # keep whole tool outputs so evaluators can trace figures
 RETRY_BACKOFF_S = (20, 60, 120)  # infrastructure errors (rate limit, tunnel, connection) are retried; every try is recorded
-# Arm 1 is bound by agent-model tokens and hit deployment server errors at 8 workers; arm 3 waits on the Data Agent,
-# which held up at 10 concurrent questions (load test 2026-10-14). Arm 3 sets the run's length.
-DEFAULT_WORKERS = {"dax": 4, "sql": 4, "fabric": 10}
+# Arm 1 is bound by agent-model tokens and hit deployment server errors at 8 workers. Arm 3 waits on the Data Agent,
+# which rejected every call after ~25 answers at 10 at once (full run 2026-10-14) though a single burst of 10 was fine.
+DEFAULT_WORKERS = {"dax": 4, "sql": 4, "fabric": 4}
 TRACE_WAITS_S = (60, 60, 120)  # spans reach Application Insights a few minutes after the response
 
 

@@ -119,6 +119,10 @@ def _infra_message(message: str | None) -> bool:
 
 
 _TOOL_ERROR = re.compile(r"An error occurred invoking '([^']+)'\s*:?\s*(.*)")
+# The Data Agent's fast rejection under sustained load (full run 2026-10-14: every call failed in about 5 s once ~10
+# questions ran at once, and it answered again as soon as the load stopped). It is our load, not the arm's answer, so it
+# is retried as infrastructure; the tool error fields are still recorded.
+_UPSTREAM_OVERLOAD = re.compile(r"The Data Agent run failed before producing a result", re.IGNORECASE)
 
 
 def _tool_error_from_message(message: str | None) -> tuple[str, str] | None:
@@ -446,6 +450,8 @@ class AttemptRecorder:
             error_type = err.get("code") or (api_status or "no_final_response")
             error_message = err.get("message")
             infra = (any(h in str(error_type).lower() for h in _INFRA_HINTS) or _infra_message(error_message)) and not tool_error
+        if tool_error and _UPSTREAM_OVERLOAD.search(tool_error[1] or ""):
+            infra = True
 
         meta = response or self._created
         agent = meta.get("agent") or {}

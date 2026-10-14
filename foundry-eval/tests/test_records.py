@@ -206,6 +206,8 @@ def test_rate_limit_and_failed_dependency_are_infra_but_a_tool_error_is_not():
     tool = attempt_for("An error occurred invoking 'x': Model rate limit exceeded upstream")
     assert tool.tool_error and not tool.infra_error
     assert not attempt_for("The model deployment encountered an error processing your request. You can retry.").infra_error
+    overload = attempt_for("An error occurred invoking 'ask_fabric_data_agent': The Data Agent run failed before producing a result.")
+    assert overload.tool_error and overload.infra_error, "the Data Agent's load rejection is retried, and still recorded"
 
 
 def test_a_408_from_foundry_is_a_retried_timeout():
