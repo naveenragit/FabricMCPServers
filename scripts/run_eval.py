@@ -133,6 +133,25 @@ def preflight_stub() -> None:
     print(f"R12 stub reachable, tools: {tools}")
 
 
+def preflight_sql() -> None:
+    """Arm 2 reads External Data Share shortcuts; if the sharing tenant's capacity is paused, every query fails."""
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+
+    async def probe() -> tuple[bool, str]:
+        async with Client(streamable_http_client(os.environ["ONELAKE_MCP_URL"]), read_timeout_seconds=90, cache=None) as c:
+            result = await c.call_tool("execute_sql", {"query": "SELECT COUNT(*) AS n FROM EXTERNAL_gold.dim_client"})
+            return result.is_error, " ".join(b.text for b in result.content if b.type == "text")[:200]
+
+    try:
+        failed, text = asyncio.run(asyncio.wait_for(probe(), 120))
+    except Exception as exc:
+        sys.exit(f"arm 2 MCP server is not reachable ({type(exc).__name__}).")
+    if failed:
+        sys.exit(f"arm 2 cannot read the linked tables ({text}). Check that the sharing tenant's Fabric capacity is running.")
+    print(f"arm 2 linked tables readable: {text}")
+
+
 def stub_environment(project: AIProjectClient, arm: str) -> dict[str, str]:
     stub = ARMS[arm].stub_agent_name
     version = project.agents.get(stub).as_dict()["versions"]["latest"]
@@ -245,6 +264,8 @@ def main() -> int:
 
     if "fabric" in args.arms:
         preflight_proxy()
+    if "sql" in args.arms:
+        preflight_sql()
     with_stub = any(r.id in STUB_ROWS and set(r.applies_to) & set(args.arms) for r in rows)
     if with_stub:
         preflight_stub()
