@@ -12,3 +12,5 @@ PyYAML==6.0.3
 uvicorn==0.52.4
 # executeDaxQueries returns LZ4-compressed Apache Arrow IPC streams.
 pyarrow==25.0.1
+# Server-side tool timings to Application Insights (APPLICATIONINSIGHTS_CONNECTION_STRING).
+azure-monitor-opentelemetry-exporter==1.0.0b58

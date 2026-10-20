@@ -22,6 +22,7 @@ from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
 
 from .backend import POWER_BI_SCOPE, BackendError, BoundedTransport
 from .settings import Settings
+from .timing import note, phase
 
 API_ROOT = "https://api.powerbi.com/v1.0/myorg"
 
@@ -47,7 +48,8 @@ class RestBackend:
         credential = self._credential()
         async with credential:
             try:
-                token = await credential.get_token(POWER_BI_SCOPE)
+                with phase("sign_in"):
+                    token = await credential.get_token(POWER_BI_SCOPE)
             except Exception:
                 raise BackendError("Backend sign-in is unavailable; check the configured identity") from None
             async with httpx2.AsyncClient(
@@ -61,11 +63,13 @@ class RestBackend:
                 follow_redirects=False,
             ) as client:
                 try:
-                    response = await client.request(method, f"{API_ROOT}{path}", json=payload)
+                    with phase("power_bi_http"):
+                        response = await client.request(method, f"{API_ROOT}{path}", json=payload)
                 except BackendError:
                     raise
                 except Exception as exc:
                     raise BackendError(f"Backend request failed ({type(exc).__name__})") from None
+                note(http_status=response.status_code)
                 if response.status_code == 401:
                     raise BackendError("Backend identity was not authorized for this semantic model")
                 if response.status_code == 403:
@@ -128,7 +132,10 @@ class RestBackend:
             payload["effectiveUsername"] = effective_username
         async with asyncio.timeout(self.settings.timeout_seconds):
             content = await self._request_bytes("POST", path, payload)
-        return self._bound_rows({"results": [{"tables": _decode_arrow(content, self.settings.max_rows)}]})
+        with phase("decode"):
+            tables = _decode_arrow(content, self.settings.max_rows)
+        note(rows=sum(len(t["rows"]) for t in tables), arrow_bytes=len(content))
+        return self._bound_rows({"results": [{"tables": tables}]})
 
     async def _request_bytes(self, method: str, path: str, payload: dict[str, Any]) -> bytes:
         if not self.settings.tenant_id:
@@ -136,7 +143,8 @@ class RestBackend:
         credential = self._credential()
         async with credential:
             try:
-                token = await credential.get_token(POWER_BI_SCOPE)
+                with phase("sign_in"):
+                    token = await credential.get_token(POWER_BI_SCOPE)
             except Exception:
                 raise BackendError("Backend sign-in is unavailable; check the configured identity") from None
             async with httpx2.AsyncClient(
@@ -150,11 +158,14 @@ class RestBackend:
                 follow_redirects=False,
             ) as client:
                 try:
-                    response = await client.request(method, f"{API_ROOT}{path}", json=payload)
+                    # Includes the Fabric engine running the DAX query; the API does not report its own time.
+                    with phase("power_bi_http"):
+                        response = await client.request(method, f"{API_ROOT}{path}", json=payload)
                 except BackendError:
                     raise
                 except Exception as exc:
                     raise BackendError(f"Backend request failed ({type(exc).__name__})") from None
+                note(http_status=response.status_code)
                 if response.status_code == 401:
                     raise BackendError("Backend identity was not authorized for this semantic model")
                 if response.status_code == 403:

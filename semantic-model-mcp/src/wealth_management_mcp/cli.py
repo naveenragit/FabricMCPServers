@@ -17,6 +17,7 @@ from .logging_config import configure_logging
 from .profile import build_catalog, load_profile_schema, validate_catalog
 from .server import create_application
 from .settings import Settings
+from .timing import configure as configure_timing
 
 
 def parser() -> argparse.ArgumentParser:
@@ -92,6 +93,7 @@ def main() -> None:
             if arguments.transport == "stdio":
                 asyncio.run(run_stdio(settings))
             else:
+                configure_timing("semantic-model-mcp")
                 app = create_application(settings).http_app()
                 uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning", access_log=False)
     except BackendError as error:

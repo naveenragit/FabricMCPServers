@@ -22,6 +22,7 @@ import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, wait
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from azure.ai.projects import AIProjectClient
@@ -36,7 +37,7 @@ from foundry_eval.evaluators.judges import FoundryJudge
 from foundry_eval.evaluators.runner import evaluate_attempt
 from foundry_eval.net import install_dns_retry
 from foundry_eval.records import AttemptRecord, StepRecord
-from foundry_eval.tool_timings import join_proxy_timings, read_proxy_log
+from foundry_eval.tool_timings import join_proxy_timings, join_server_spans, read_proxy_log, server_span_query
 
 install_dns_retry()
 
@@ -45,9 +46,9 @@ RUNS = ROOT / "artifacts" / "runs"
 HARNESS_VERSION = "0.2"
 FULL_OUTPUT = 400_000  # keep whole tool outputs so evaluators can trace figures
 RETRY_BACKOFF_S = (20, 60, 120)  # infrastructure errors (rate limit, tunnel, connection) are retried; every try is recorded
-# Arm 1 is bound by agent-model tokens and hit deployment server errors at 8 workers. Arm 3 waits on the Data Agent,
-# which rejected every call after ~25 answers at 10 at once (full run 2026-10-14) though a single burst of 10 was fine.
-DEFAULT_WORKERS = {"dax": 4, "sql": 4, "fabric": 4}
+# Concurrency test 2026-10-20: arms 1 and 2 had no failures at 1-10 simultaneous questions; the Data Agent failed every
+# call at 5. Run defaults chosen by the user from that result.
+DEFAULT_WORKERS = {"dax": 5, "sql": 5, "fabric": 3}
 TRACE_WAITS_S = (60, 60, 120)  # spans reach Application Insights a few minutes after the response
 
 
@@ -81,6 +82,20 @@ def prior_durations(arm: str) -> dict[str, float]:
             if attempt.get("status") == "completed" and attempt.get("duration_s"):
                 seen[attempt["question_id"]].append(attempt["duration_s"])
     return {qid: sum(v) / len(v) for qid, v in seen.items()}
+
+
+def join_server_timings(stores: list[RunStore]) -> None:
+    """The DAX and SQL servers' own per-call spans (Application Insights), joined onto their tool calls."""
+    app_id = os.environ.get("FOUNDRY_APPINSIGHTS_APP_ID")
+    if not app_id or not stores:
+        return
+    from foundry_eval.traces import query_app_insights
+
+    for store in stores:
+        start = store.run.started_at - timedelta(minutes=2)
+        rows = query_app_insights(app_id, server_span_query(start, datetime.now(UTC) + timedelta(minutes=1)))
+        joined, missing = join_server_spans(store, rows, source="server span (Application Insights)")
+        print(f"server timings {store.run.arm}: joined {joined} tool calls, {missing} without a server span", flush=True)
 
 
 def join_traces(stores: list[RunStore]) -> None:
@@ -356,6 +371,7 @@ def main() -> int:
         print(f"{arm}: {run.status} attempts={run.n_attempts} completed={run.n_completed} failed={run.n_failed} infra={run.n_infra_errors} tool_errors={run.n_tool_errors}")
     if not args.no_traces:
         join_traces(list(stores.values()))
+        join_server_timings([s for arm, s in stores.items() if arm in ("dax", "sql")])
     if "fabric" in stores:
         if args.proxy_log and Path(args.proxy_log).exists():
             joined = join_proxy_timings(stores["fabric"], read_proxy_log(args.proxy_log), source="arm 3 proxy log")

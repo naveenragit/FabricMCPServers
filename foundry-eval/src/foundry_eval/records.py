@@ -261,9 +261,10 @@ class TraceRecord(_Record):
 
 
 class ToolTimingRecord(_Record):
-    """How long one tool call took inside the tool server, by its own clock, joined from the server's log.
+    """How long one tool call took inside the tool server, by its own clock, joined from the server's telemetry.
 
-    Only the arm 3 proxy writes this log; it splits a call into the blocks the Foundry trace cannot see.
+    Sources: the arm 3 proxy's log, and the DAX and SQL servers' spans in Application Insights. It splits a call into
+    the blocks the Foundry trace cannot see.
     """
 
     attempt_id: str
@@ -274,6 +275,14 @@ class ToolTimingRecord(_Record):
     source: str = Field(description="Which log the timing came from")
     started_at: datetime | None = None
     total_s: float | None = Field(None, description="Request received to answer returned, inside the server")
+    phases: dict[str, float] = Field(
+        default_factory=dict,
+        description="Seconds per phase inside the server, e.g. sign_in, connect, execute, fetch, power_bi_http, decode, serialize",
+    )
+    rows: int | None = None
+    response_bytes: int | None = None
+    error_code: str | None = None
+    linked_by: str | None = Field(None, description="trace_id (exact) or query_hash_and_time (nearest match)")
     sign_in_s: float | None = Field(None, description="Getting the upstream token (cached after the first call)")
     session_open_s: float | None = Field(None, description="Opening the upstream MCP session")
     tool_discovery_s: float | None = Field(None, description="Listing upstream tools; first call only")

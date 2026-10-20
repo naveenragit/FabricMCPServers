@@ -39,6 +39,7 @@ from .profile import PROFILE_ID, canonical_json_bytes, compact_schema, load_prof
 from .responses import verify_native_response
 from .rest_backend import RestBackend
 from .settings import Settings
+from .timing import note, phase, tool_call
 
 CATALOG_URI = "wealth://models/sm_wealth_mgmt_import/schema"
 PROFILE_URI = "wealth://schemas/fabric-dax/1.0.0"
@@ -238,7 +239,17 @@ class Application:
         if params.name not in self.tools:
             raise MCPError(-32602, "Unknown or disabled tool")
         if self.settings.backend == "fabric_rest":
-            return await self.call_rest_tool(params)
+            args = params.arguments or {}
+            query = args.get("dax_query") if isinstance(args.get("dax_query"), str) else None
+            headers = getattr(getattr(ctx, "request", None), "headers", None)
+            with tool_call(params.name, query, headers):
+                result = await self.call_rest_tool(params)
+                note(is_error=bool(result.is_error), response_bytes=sum(
+                    len(c.text.encode("utf-8")) for c in result.content if isinstance(c, TextContent)
+                ))
+                if result.is_error and isinstance(result.structured_content, dict):
+                    note(error_code=result.structured_content.get("code"))
+                return result
         role = self.roles[params.name]
         args = params.arguments or {}
         native = self.native_tools[params.name]
@@ -330,7 +341,8 @@ class Application:
                 else:
                     # A catalog read is an author snapshot; it never proves live definition equality.
                     data = self.catalog if args.get("detail") == "full" else self.compact_catalog
-            result = result_data(data)
+            with phase("serialize"):
+                result = result_data(data)
             result.meta = {"wealth-management-mcp/provenance": {
                 "completeness": "unknown", "data_freshness": "unknown",
                 "live_definition": "unverified",
@@ -341,7 +353,8 @@ class Application:
                 ),
                 "data_path": "fabric_rest",
             }}
-            self.check_result_bounds(result)
+            with phase("bounds_check"):
+                self.check_result_bounds(result)
             return result
         except BackendError as error:
             return result_data({"code": "operation_rejected", "message": str(error)}, error=True)

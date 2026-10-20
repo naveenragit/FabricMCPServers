@@ -25,6 +25,7 @@ from starlette.routing import Route
 from . import __version__
 from .settings import Settings
 from .sql_backend import BackendError, SqlBackend
+from .timing import note, phase, tool_call
 
 _NOTICE = "Restricted POC; all callers share one backend identity. "
 
@@ -70,8 +71,18 @@ class Application:
         if params.name not in TOOLS:
             raise MCPError(-32602, "Unknown tool")
         args = params.arguments or {}
+        query = args.get("query") if isinstance(args.get("query"), str) else None
+        headers = getattr(getattr(ctx, "request", None), "headers", None)
+        with tool_call(params.name, query, headers):
+            result = await self._call_tool(params.name, args)
+            note(is_error=bool(result.is_error), response_bytes=len(result.content[0].text.encode("utf-8")))
+            if result.is_error and isinstance(result.structured_content, dict):
+                note(error_code=result.structured_content.get("code"))
+            return result
+
+    async def _call_tool(self, name: str, args: dict[str, Any]) -> CallToolResult:
         try:
-            if params.name == "execute_sql":
+            if name == "execute_sql":
                 query = args.get("query")
                 if not isinstance(query, str) or set(args) != {"query"}:
                     raise BackendError("Arguments must be exactly {\"query\": <string>}")
@@ -80,8 +91,10 @@ class Application:
                 if args:
                     raise BackendError("get_database_schema takes no arguments")
                 data = await self.backend.database_schema()
-            result = result_data(data)
-            if len(result.content[0].text.encode("utf-8")) * 2 + 4096 > self.settings.max_response_bytes:
+            with phase("serialize"):
+                result = result_data(data)
+                too_big = len(result.content[0].text.encode("utf-8")) * 2 + 4096 > self.settings.max_response_bytes
+            if too_big:
                 raise BackendError("Result exceeds the response byte budget; aggregate or filter further")
             result.meta = {"onelake-tables-mcp/provenance": {
                 "identity_mode": "fixed_poc_backend", "data_path": "fabric_sql_analytics_endpoint",

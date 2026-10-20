@@ -37,6 +37,10 @@ def main(argv: list[str] | None = None) -> int:
     traces.add_argument("run_id")
     traces.add_argument("--app-id", default=os.environ.get("FOUNDRY_APPINSIGHTS_APP_ID"))
     traces.add_argument("--refresh", action="store_true", help="re-fetch attempts already traced (the latest record wins)")
+    servers = commands.add_parser("server-timings", help="join the DAX/SQL servers' own spans onto a run's tool calls")
+    servers.add_argument("root")
+    servers.add_argument("run_id")
+    servers.add_argument("--app-id", default=os.environ.get("FOUNDRY_APPINSIGHTS_APP_ID"))
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     if args.command == "schemas":
@@ -46,6 +50,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.app_id:
         parser.error("--app-id or FOUNDRY_APPINSIGHTS_APP_ID is required")
+    if args.command == "server-timings":
+        from datetime import UTC, datetime, timedelta
+
+        from .tool_timings import join_server_spans, server_span_query
+        from .traces import query_app_insights
+
+        store = RunStore.open(args.root, args.run_id)
+        end = (store.run.ended_at or datetime.now(UTC)) + timedelta(minutes=5)
+        rows = query_app_insights(args.app_id, server_span_query(store.run.started_at - timedelta(minutes=2), end))
+        joined, missing = join_server_spans(store, rows, source="server span (Application Insights)")
+        print(f"{joined} tool calls joined, {missing} without a server span")
+        return 0
     from .traces import enrich_run
 
     store = RunStore.open(args.root, args.run_id)

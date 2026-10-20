@@ -14,6 +14,7 @@ from uuid import UUID
 from azure.identity import AzureCliCredential, ManagedIdentityCredential
 
 from .settings import Settings
+from .timing import note, phase
 
 SQL_SCOPE = "https://database.windows.net/.default"
 SQL_COPT_SS_ACCESS_TOKEN = 1256
@@ -75,19 +76,23 @@ class SqlBackend:
         import mssql_python
 
         try:
-            token = self._credential.get_token(SQL_SCOPE).token.encode("utf-16-le")
+            with phase("sign_in"):
+                token = self._credential.get_token(SQL_SCOPE).token.encode("utf-16-le")
         except Exception:
             raise BackendError("Backend sign-in is unavailable; check the configured identity") from None
         token_struct = struct.pack(f"<I{len(token)}s", len(token), token)
         # A cold SQL analytics endpoint can exceed the driver's ~15s default login timeout.
         for attempt in range(2):
             try:
-                return mssql_python.connect(
-                    f"Server={self.settings.sql_endpoint},1433;Database={self.settings.database};"
-                    "Encrypt=yes;TrustServerCertificate=no;",
-                    attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct},
-                    timeout=30,
-                )
+                with phase("connect"):
+                    connection = mssql_python.connect(
+                        f"Server={self.settings.sql_endpoint},1433;Database={self.settings.database};"
+                        "Encrypt=yes;TrustServerCertificate=no;",
+                        attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct},
+                        timeout=30,
+                    )
+                note(connect_attempts=attempt + 1)
+                return connection
             except mssql_python.OperationalError:
                 if attempt == 0:
                     continue
@@ -99,14 +104,17 @@ class SqlBackend:
     def _fetch(self, query: str, limit: int | None) -> dict[str, Any]:
         with closing(self._connect()) as connection, closing(connection.cursor()) as cursor:
             try:
-                cursor.execute(query)
+                with phase("execute"):
+                    cursor.execute(query)
             except Exception as exc:
                 # Parity with the DAX server, which returns only a fault code and no engine text.
                 raise BackendError(f"SQL query failed ({type(exc).__name__})") from None
             if cursor.description is None:
                 return {"columns": [], "rows": []}
             columns = [column[0] for column in cursor.description]
-            rows = cursor.fetchall() if limit is None else cursor.fetchmany(limit + 1)
+            with phase("fetch"):
+                rows = cursor.fetchall() if limit is None else cursor.fetchmany(limit + 1)
+            note(rows=len(rows), columns=len(columns))
             if limit is not None and len(rows) > limit:
                 raise BackendError(
                     f"Result exceeds the {limit}-row limit; aggregate, filter, or use TOP to reduce it"

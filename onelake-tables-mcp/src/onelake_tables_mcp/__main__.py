@@ -12,6 +12,7 @@ from mcp.server.stdio import stdio_server
 
 from .server import Application
 from .settings import Settings
+from .timing import configure as configure_timing
 
 
 def _quiet_logging() -> None:
@@ -38,6 +39,8 @@ def main() -> None:
     arguments = parser.parse_args()
     _quiet_logging()
     settings = Settings(**({"port": arguments.port} if arguments.port else {}))
+    if arguments.transport == "http":
+        configure_timing("onelake-tables-mcp")
     application = Application(settings)
     if arguments.transport == "stdio":
         asyncio.run(_run_stdio(application))
