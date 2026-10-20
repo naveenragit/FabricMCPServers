@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from foundry_eval.analysis import load_tables
+from foundry_eval.analysis import load_tables, wide_attempts
 
 ROOT = Path(__file__).resolve().parents[1]
 ZERO = ["read_only_violation", "secret_canary_leak", "tool_allowlist", "named_row_cap", "injection_followed"]
@@ -38,6 +38,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_ids", nargs="+")
     parser.add_argument("--out")
+    parser.add_argument("--export", help="directory for CSVs of every metric, e.g. artifacts/metrics/<name>")
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
     # Trace joins are append-only and can be refreshed; the latest record per attempt wins everywhere below.
@@ -269,15 +270,7 @@ def main() -> int:
     tt = tables["tool_timings"].drop_duplicates(["attempt_id", "step_index"], keep="last")
     proxy = tt[tt["arm"] == "fabric"]
     servers = tt[tt["arm"].isin(["dax", "sql"])]
-    # Foundry's tool spans and the stream's tool calls are in the same order, so each call gets its Foundry duration.
-    steps = tables["steps"]
-    spans_rows = []
-    for _, r in timed.iterrows() if not timed.empty else []:
-        tool_spans = [s for s in (r["spans"] or []) if s.get("kind") == "tool"]
-        calls = steps[(steps["attempt_id"] == r["attempt_id"]) & (steps["kind"] == "tool_call")].sort_values("index")
-        for span, (_, call) in zip(tool_spans, calls.iterrows(), strict=False):
-            spans_rows.append({"attempt_id": r["attempt_id"], "step_index": call["index"], "foundry_s": span["duration_s"]})
-    foundry_calls = pd.DataFrame(spans_rows, columns=["attempt_id", "step_index", "foundry_s"])
+    foundry_calls = foundry_tool_spans(timed, tables["steps"])
     if len(servers):
         section("Inside the DAX and SQL tool calls (servers' own spans, median seconds)")
         expanded = pd.concat([servers[["arm", "tool_name", "total_s"]].reset_index(drop=True), pd.json_normalize(servers["phases"].tolist())], axis=1)
@@ -362,7 +355,59 @@ def main() -> int:
         dest = ROOT / args.out
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(text_out, encoding="utf-8")
+    if args.export:
+        export(tables, ROOT / args.export)
     return 0
+
+
+def foundry_tool_spans(traces: pd.DataFrame, steps: pd.DataFrame) -> pd.DataFrame:
+    """Foundry's tool span duration per tool call (attempt_id, step_index, foundry_s)."""
+    # Foundry's tool spans and the stream's tool calls are in the same order, so each call gets its Foundry duration.
+    rows = []
+    for _, r in traces.iterrows() if not traces.empty else []:
+        tool_spans = [s for s in (r["spans"] or []) if s.get("kind") == "tool"]
+        calls = steps[(steps["attempt_id"] == r["attempt_id"]) & (steps["kind"] == "tool_call")].sort_values("index")
+        for span, (_, call) in zip(tool_spans, calls.iterrows(), strict=False):
+            rows.append({"attempt_id": r["attempt_id"], "step_index": call["index"], "foundry_s": span["duration_s"]})
+    return pd.DataFrame(rows, columns=["attempt_id", "step_index", "foundry_s"])
+
+
+def _flat(frame: pd.DataFrame) -> pd.DataFrame:
+    """Nested cells (span timelines, phase dicts, judge details) become JSON text so the CSV stays one row per record."""
+    frame = frame.copy()
+    for column in frame.columns:
+        if frame[column].map(lambda v: isinstance(v, (dict, list))).any():
+            frame[column] = frame[column].map(lambda v: json.dumps(v, default=str) if isinstance(v, (dict, list)) else v)
+    return frame
+
+
+def export(tables: dict[str, pd.DataFrame], dest: Path) -> None:
+    """Every table as CSV, plus per_request.csv (attempt + scores + trace + summed server/proxy phases) and per_tool_call.csv."""
+    dest.mkdir(parents=True, exist_ok=True)
+    tt = tables["tool_timings"].drop_duplicates(["attempt_id", "step_index"], keep="last")
+    phases = pd.json_normalize(tt["phases"].map(lambda p: p or {}).tolist()).add_prefix("phase__")
+    tool_calls = pd.concat([tt.drop(columns=["phases"]).reset_index(drop=True), phases], axis=1)
+    steps = tables["steps"]
+    calls = steps[steps["kind"] == "tool_call"][
+        ["attempt_id", "arm", "index", "tool_name", "is_schema_call", "start_s", "duration_s", "tool_status", "tool_error", "output_chars", "query_text"]
+    ].rename(columns={"index": "step_index", "start_s": "stream_start_s", "duration_s": "stream_duration_s"})
+    per_tool_call = calls.merge(tool_calls.drop(columns=["arm", "tool_name"]), on=["attempt_id", "step_index"], how="left")
+    per_tool_call = per_tool_call.merge(foundry_tool_spans(tables["traces"], steps), on=["attempt_id", "step_index"], how="left")
+    per_tool_call["foundry_to_tool_hop_s"] = per_tool_call["foundry_s"] - per_tool_call["total_s"]
+
+    wide = wide_attempts(tables)
+    traces = tables["traces"].drop(columns=["spans"], errors="ignore")
+    traces = traces.drop(columns=[c for c in ("run_id", "arm", "schema_version") if c in traces]).add_prefix("trace__")
+    per_request = wide.merge(traces, left_on="attempt_id", right_on="trace__attempt_id", how="left").drop(columns=["trace__attempt_id"])
+    numeric = tool_calls.select_dtypes("number").columns.difference(["step_index"])
+    sums = tool_calls.groupby("attempt_id")[list(numeric)].sum(min_count=1).add_prefix("tools_sum__")
+    sums["tools_sum__calls_timed"] = tool_calls.groupby("attempt_id").size()
+    per_request = per_request.merge(sums, left_on="attempt_id", right_index=True, how="left")
+
+    files = {**tables, "tool_timings": tool_calls, "per_request": per_request, "per_tool_call": per_tool_call}
+    for name, frame in files.items():
+        _flat(frame).to_csv(dest / f"{name}.csv", index=False, encoding="utf-8")
+    print(f"\nexported {', '.join(f'{n} ({len(f)})' for n, f in files.items())} to {dest}")
 
 
 if __name__ == "__main__":
