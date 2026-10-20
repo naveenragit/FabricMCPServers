@@ -269,34 +269,35 @@ def main() -> int:
     tt = tables["tool_timings"].drop_duplicates(["attempt_id", "step_index"], keep="last")
     proxy = tt[tt["arm"] == "fabric"]
     servers = tt[tt["arm"].isin(["dax", "sql"])]
+    # Foundry's tool spans and the stream's tool calls are in the same order, so each call gets its Foundry duration.
+    steps = tables["steps"]
+    spans_rows = []
+    for _, r in timed.iterrows() if not timed.empty else []:
+        tool_spans = [s for s in (r["spans"] or []) if s.get("kind") == "tool"]
+        calls = steps[(steps["attempt_id"] == r["attempt_id"]) & (steps["kind"] == "tool_call")].sort_values("index")
+        for span, (_, call) in zip(tool_spans, calls.iterrows(), strict=False):
+            spans_rows.append({"attempt_id": r["attempt_id"], "step_index": call["index"], "foundry_s": span["duration_s"]})
+    foundry_calls = pd.DataFrame(spans_rows, columns=["attempt_id", "step_index", "foundry_s"])
     if len(servers):
         section("Inside the DAX and SQL tool calls (servers' own spans, median seconds)")
         expanded = pd.concat([servers[["arm", "tool_name", "total_s"]].reset_index(drop=True), pd.json_normalize(servers["phases"].tolist())], axis=1)
         out.append(expanded.groupby(["arm", "tool_name"]).median(numeric_only=True).round(2).to_string())
-        steps = tables["steps"]
-        spans_rows = []
-        for _, r in timed.iterrows() if not timed.empty else []:
-            tool_spans = [s for s in (r["spans"] or []) if s.get("kind") == "tool"]
-            calls = steps[(steps["attempt_id"] == r["attempt_id"]) & (steps["kind"] == "tool_call")].sort_values("index")
-            for span, (_, call) in zip(tool_spans, calls.iterrows(), strict=False):
-                spans_rows.append({"attempt_id": r["attempt_id"], "step_index": call["index"], "foundry_s": span["duration_s"]})
-        if spans_rows:
-            hop = servers.merge(pd.DataFrame(spans_rows), on=["attempt_id", "step_index"])
-            if len(hop):
-                hop["hop_s"] = hop["foundry_s"] - hop["total_s"]
-                out.append("\nFoundry -> server hop (Foundry tool span minus server total), median: "
-                           + ", ".join(f"{a}={v:.2f}s" for a, v in hop.groupby("arm")["hop_s"].median().items()))
+        hop = servers.merge(foundry_calls, on=["attempt_id", "step_index"])
+        if len(hop):
+            hop["hop_s"] = hop["foundry_s"] - hop["total_s"]
+            out.append("\nFoundry -> server hop (Foundry tool span minus server total), median: "
+                       + ", ".join(f"{a}={v:.2f}s" for a, v in hop.groupby("arm")["hop_s"].median().items()))
         out.append("joined by: " + ", ".join(f"{k}={v}" for k, v in servers["linked_by"].value_counts().items()))
     if len(proxy):
-        tt = proxy
         section("Inside the arm 3 tool call (proxy's own clock, median seconds)")
         tcols = ["total_s", "sign_in_s", "session_open_s", "tool_discovery_s", "upstream_call_s", "session_close_s"]
-        out.append(tt[tcols].median().round(2).to_string())
-        spans = timed[timed["arm"] == "fabric"][["attempt_id", "query_s"]] if not timed.empty else pd.DataFrame()
-        joined = tt.merge(spans, on="attempt_id") if len(spans) else pd.DataFrame()
-        if len(joined):
-            hop = (joined["query_s"] - joined["total_s"]).median()
-            out.append(f"Foundry -> tunnel -> proxy hop (Foundry tool span minus proxy total), median: {hop:.2f} s; joined calls: {len(tt)}")
+        out.append(proxy[tcols].median().round(2).to_string())
+        hop = proxy.merge(foundry_calls, on=["attempt_id", "step_index"])
+        if len(hop):
+            out.append(
+                f"Foundry -> tunnel -> proxy hop (Foundry tool span minus proxy total), median: "
+                f"{(hop['foundry_s'] - hop['total_s']).median():.2f} s; joined calls: {len(proxy)}"
+            )
 
     section("Tokens (mean per completed attempt; agent only)")
     tok = timed if not timed.empty else done
