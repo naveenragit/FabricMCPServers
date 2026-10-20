@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from .records import TABLES
-from .store import ATTEMPTS_FILE, EVALUATIONS_FILE, RUN_FILE, STEPS_FILE, TRACES_FILE
+from .store import ATTEMPTS_FILE, EVALUATIONS_FILE, RUN_FILE, STEPS_FILE, TOOL_TIMINGS_FILE, TRACES_FILE
 
 
 def _jsonl(path: Path) -> list[dict]:
@@ -30,6 +30,7 @@ def load_tables(root: Path | str, run_ids: list[str] | None = None) -> dict[str,
         rows["steps"] += _jsonl(directory / STEPS_FILE)
         rows["evaluations"] += _jsonl(directory / EVALUATIONS_FILE)
         rows["traces"] += _jsonl(directory / TRACES_FILE)
+        rows["tool_timings"] += _jsonl(directory / TOOL_TIMINGS_FILE)
     frames = {}
     for name, model in TABLES.items():
         frame = pd.DataFrame(rows[name], columns=list(model.model_fields))

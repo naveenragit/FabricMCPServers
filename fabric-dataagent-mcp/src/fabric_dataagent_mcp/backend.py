@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx2
@@ -98,24 +101,51 @@ class DataAgentBackend:
 
     async def ask(self, question: str) -> str:
         started = time.monotonic()
-        token = await self.token()
+        timing: dict[str, Any] = {
+            "event": "timing",
+            "started_at": datetime.now(UTC).isoformat(),
+            "question_sha256": hashlib.sha256(question.encode()).hexdigest(),
+        }
+        mark = started
+
+        def lap(name: str) -> None:
+            nonlocal mark
+            now = time.monotonic()
+            timing[name] = round(now - mark, 3)
+            mark = now
+
+        result = None
         try:
-            async with self._client(token.token) as client:
-                if self._tool is None:
-                    tools = (await client.list_tools()).tools
-                    if len(tools) != 1:
-                        raise BackendError(f"Expected one data agent tool, found {len(tools)}")
-                    properties = tools[0].input_schema.get("properties") or {}
-                    if not properties:
-                        raise BackendError("The data agent tool declares no input argument")
-                    self._tool = (tools[0].name, next(iter(properties)))
-                name, argument = self._tool
-                result = await client.call_tool(name, {argument: question})
-        except BackendError:
-            raise
-        except Exception as error:
-            log.error("upstream failure after %.1fs: %s", time.monotonic() - started, describe_failure(error))
-            raise BackendError(describe_failure(error)) from None
+            token = await self.token()
+            lap("sign_in_s")
+            try:
+                async with self._client(token.token) as client:
+                    lap("session_open_s")
+                    if self._tool is None:
+                        tools = (await client.list_tools()).tools
+                        if len(tools) != 1:
+                            raise BackendError(f"Expected one data agent tool, found {len(tools)}")
+                        properties = tools[0].input_schema.get("properties") or {}
+                        if not properties:
+                            raise BackendError("The data agent tool declares no input argument")
+                        self._tool = (tools[0].name, next(iter(properties)))
+                        lap("tool_discovery_s")
+                    name, argument = self._tool
+                    result = await client.call_tool(name, {argument: question})
+                    lap("upstream_call_s")
+                lap("session_close_s")
+            except BackendError:
+                raise
+            except Exception as error:
+                log.error("upstream failure after %.1fs: %s", time.monotonic() - started, describe_failure(error))
+                raise BackendError(describe_failure(error)) from None
+        finally:
+            timing["total_s"] = round(time.monotonic() - started, 3)
+            timing["is_error"] = result is None or bool(result.is_error)
+            if result is not None:
+                timing["answer_chars"] = sum(len(b.text) for b in result.content if b.type == "text")
+            # One JSON line per call, joined onto the evaluation runs by question hash and time.
+            log.info("timing %s", json.dumps(timing))
         answer = "\n".join(block.text for block in result.content if block.type == "text")
         log.info("answered in %.1fs (error=%s, chars=%d)", time.monotonic() - started, result.is_error, len(answer))
         if result.is_error:

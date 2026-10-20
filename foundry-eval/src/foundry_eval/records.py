@@ -241,7 +241,46 @@ class TraceRecord(_Record):
     tool_error: bool = Field(
         False, description="The trace shows a tool error: error.type starts with tool, or a tool span failed"
     )
+    model_spans: int = Field(0, description="Model-call (chat) spans; Foundry may not emit one for every model call")
+    model_time_s: float | None = Field(None, description="Wall time covered by the model-call spans")
+    untraced_s: float | None = Field(
+        None, description="Agent span time covered by no tool or model span: orchestration and untraced model calls"
+    )
+    model_input_tokens: int | None = Field(None, description="Sum over model-call spans")
+    model_output_tokens: int | None = None
+    model_cache_read_tokens: int | None = Field(
+        None, description="Prompt-cache hits from the trace; the Responses API usage reports 0 here"
+    )
+    model_cache_creation_tokens: int | None = None
+    spans: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Tool and model-call spans in start order: kind, name, start_s (from agent start), duration_s, "
+        "success, and token counts for model calls",
+    )
     fetched_at: datetime | None = None
+
+
+class ToolTimingRecord(_Record):
+    """How long one tool call took inside the tool server, by its own clock, joined from the server's log.
+
+    Only the arm 3 proxy writes this log; it splits a call into the blocks the Foundry trace cannot see.
+    """
+
+    attempt_id: str
+    run_id: str
+    arm: Arm
+    step_index: int | None = Field(None, description="StepRecord.index of the tool call")
+    tool_name: str
+    source: str = Field(description="Which log the timing came from")
+    started_at: datetime | None = None
+    total_s: float | None = Field(None, description="Request received to answer returned, inside the server")
+    sign_in_s: float | None = Field(None, description="Getting the upstream token (cached after the first call)")
+    session_open_s: float | None = Field(None, description="Opening the upstream MCP session")
+    tool_discovery_s: float | None = Field(None, description="Listing upstream tools; first call only")
+    upstream_call_s: float | None = Field(None, description="The upstream service's own work: the Data Agent answering")
+    session_close_s: float | None = None
+    is_error: bool | None = None
+    answer_chars: int | None = None
 
 
 TABLES: dict[str, type[_Record]] = {
@@ -250,4 +289,5 @@ TABLES: dict[str, type[_Record]] = {
     "steps": StepRecord,
     "evaluations": EvaluationRecord,
     "traces": TraceRecord,
+    "tool_timings": ToolTimingRecord,
 }

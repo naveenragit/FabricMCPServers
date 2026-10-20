@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     traces.add_argument("root")
     traces.add_argument("run_id")
     traces.add_argument("--app-id", default=os.environ.get("FOUNDRY_APPINSIGHTS_APP_ID"))
+    traces.add_argument("--refresh", action="store_true", help="re-fetch attempts already traced (the latest record wins)")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     if args.command == "schemas":
@@ -48,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     from .traces import enrich_run
 
     store = RunStore.open(args.root, args.run_id)
-    records, missing = enrich_run(store, args.app_id)
+    records, missing = enrich_run(store, args.app_id, refresh=args.refresh)
     print(f"{len(records)} attempts traced, {missing} without spans yet (retry in a few minutes)")
     for record in records:
         print(f"  {record.response_id} tool_error={record.tool_error} error_type={record.error_type}")

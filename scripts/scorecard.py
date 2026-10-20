@@ -7,6 +7,7 @@ Needs the analysis extra (pandas). Reads the plan's tables only; no reference va
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -39,6 +40,8 @@ def main() -> int:
     parser.add_argument("--out")
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
+    # Trace joins are append-only and can be refreshed; the latest record per attempt wins everywhere below.
+    tables["traces"] = tables["traces"].drop_duplicates("attempt_id", keep="last")
     attempts, evals, runs = tables["attempts"], tables["evaluations"], tables["runs"]
     # The stream can hide a failed tool call behind a transport message; Foundry's trace is the second source (D17).
     latest_trace = tables["traces"].drop_duplicates("attempt_id", keep="last").set_index("attempt_id")
@@ -231,6 +234,105 @@ def main() -> int:
     else:
         for arm, g in blocked.groupby("arm"):
             out.append(f"{arm}: {len(g)} attempts on rows {', '.join(sorted(g['question_id'].unique()))}")
+
+    traces = tables["traces"].drop_duplicates("attempt_id", keep="last")
+    timed = done.drop(columns=["tool_time_trace_s"]).merge(traces, on="attempt_id", how="inner", suffixes=("", "_trace"))
+    section("Where the time goes (median seconds per completed attempt; Foundry trace + client clock)")
+    if timed.empty:
+        out.append("no traced attempts")
+    else:
+        timed["client_overhead_s"] = timed["duration_s"] - timed["agent_span_s"]
+        timed["gap_s"] = timed["spans"].map(lambda s: sum(x["duration_s"] for x in (s or []) if x.get("kind") == "gap"))
+        timed["schema_s"] = timed["spans"].map(lambda s: sum(x["duration_s"] for x in (s or []) if x.get("kind") == "tool" and "schema" in x["name"]))
+        timed["query_s"] = timed["spans"].map(lambda s: sum(x["duration_s"] for x in (s or []) if x.get("kind") == "tool" and "schema" not in x["name"]))
+        cols = {
+            "duration_s": "client total",
+            "client_overhead_s": "client <-> Foundry (outside the agent span)",
+            "agent_span_s": "agent span (Foundry)",
+            "schema_s": "  schema tool calls",
+            "query_s": "  data tool calls (query / Data Agent)",
+            "model_time_s": "  last model call (traced)",
+            "gap_s": "  earlier model calls + orchestration (untraced gaps)",
+            "time_to_first_token_s": "time to first answer token (client)",
+            "reasoning_time_s": "reasoning items (stream)",
+        }
+        med = timed.groupby("arm")[list(cols)].median().round(1).T
+        med.index = [cols[c] for c in med.index]
+        out.append(med.to_string())
+        p95 = timed.groupby("arm")[["duration_s", "agent_span_s", "query_s"]].quantile(0.95).round(1).T
+        out.append("\np95: " + "; ".join(f"{c}: " + ", ".join(f"{a}={v}" for a, v in p95.loc[c].items()) for c in p95.index))
+        out.append(
+            "Foundry emits a model-call span only for the last model call; earlier model calls (deciding and writing each tool"
+            " call) show as gaps between spans, together with orchestration."
+        )
+
+    tt = tables["tool_timings"].drop_duplicates(["attempt_id", "step_index"], keep="last")
+    if len(tt):
+        section("Inside the arm 3 tool call (proxy's own clock, median seconds)")
+        tcols = ["total_s", "sign_in_s", "session_open_s", "tool_discovery_s", "upstream_call_s", "session_close_s"]
+        out.append(tt[tcols].median().round(2).to_string())
+        spans = timed[timed["arm"] == "fabric"][["attempt_id", "query_s"]] if not timed.empty else pd.DataFrame()
+        joined = tt.merge(spans, on="attempt_id") if len(spans) else pd.DataFrame()
+        if len(joined):
+            hop = (joined["query_s"] - joined["total_s"]).median()
+            out.append(f"Foundry -> tunnel -> proxy hop (Foundry tool span minus proxy total), median: {hop:.2f} s; joined calls: {len(tt)}")
+
+    section("Tokens (mean per completed attempt; agent only)")
+    tok = timed if not timed.empty else done
+    tcols = {
+        "input_tokens": "input (Responses API usage)",
+        "output_tokens": "output (API, includes reasoning)",
+        "reasoning_tokens": "reasoning (API)",
+        "cached_input_tokens": "cached input (API; reports 0)",
+        "model_input_tokens": "input, last model call (trace)",
+        "model_output_tokens": "output, last model call (trace)",
+        "model_cache_read_tokens": "prompt-cache read, last model call (trace)",
+        "model_cache_creation_tokens": "prompt-cache write, last model call (trace)",
+    }
+    present = [c for c in tcols if c in tok.columns]
+    tmean = tok.groupby("arm")[present].mean().round(0).T
+    tmean.index = [tcols[c] for c in tmean.index]
+    out.append(tmean.to_string())
+    if "model_cache_read_tokens" in tok.columns:
+        rate = tok.groupby("arm").apply(lambda g: g["model_cache_read_tokens"].sum() / max(g["model_input_tokens"].sum(), 1))
+        out.append("prompt-cache hit rate on the last model call: " + ", ".join(f"{a}={pct(v)}" for a, v in rate.items()))
+
+    section("Tool call timings (Foundry tool spans, seconds)")
+    rows_t = []
+    for _, r in timed.iterrows() if not timed.empty else []:
+        for s in r["spans"] or []:
+            if s.get("kind") == "tool":
+                rows_t.append({"arm": r["arm"], "tool": s["name"].split(".")[-1], "s": s["duration_s"]})
+    if rows_t:
+        tdf = pd.DataFrame(rows_t)
+        agg = tdf.groupby(["arm", "tool"])["s"].agg(calls="count", p50="median", p95=lambda s: s.quantile(0.95), max="max").round(1)
+        out.append(agg.to_string())
+
+    section("By question category and tier (which arm does what well; correct = all criteria met)")
+    meta = {}
+    dataset = ROOT / "evals" / "eval-dataset.jsonl"
+    if dataset.exists():
+        for line in dataset.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            meta[row["id"]] = (row.get("category"), row.get("tier"))
+    scored = cj.merge(
+        attempts[["attempt_id", "duration_s", "total_tokens"]].rename(columns={"duration_s": "attempt_s", "total_tokens": "attempt_tokens"}),
+        on="attempt_id",
+        how="left",
+    )
+    scored["category"] = scored["question_id"].map(lambda q: (meta.get(q) or (None, None))[0])
+    scored["tier"] = scored["question_id"].map(lambda q: (meta.get(q) or (None, None))[1])
+    for key in ("category", "tier"):
+        grid = scored.groupby([key, "arm"]).agg(
+            n=("score", "size"), correct=("score", lambda s: (s == 1.0).mean()), p50_s=("attempt_s", "median"),
+            tokens=("attempt_tokens", "mean"),
+        )
+        wide = grid["correct"].unstack("arm").map(pct)
+        speed = grid["p50_s"].unstack("arm").round(1)
+        best = grid.reset_index().sort_values(["correct", "p50_s"], ascending=[False, True]).groupby(key).first()["arm"]
+        table_k = wide.join(speed, rsuffix=" p50 s").join(best.rename("best arm"))
+        out.append(f"\nby {key}:\n" + table_k.to_string())
+    out.append("best arm = highest correct rate, ties broken by lower median latency.")
 
     text_out = "\n".join(out)
     print(text_out)

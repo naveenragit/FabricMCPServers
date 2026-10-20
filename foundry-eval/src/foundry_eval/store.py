@@ -23,6 +23,7 @@ from .records import (
     RunRecord,
     RunStatus,
     StepRecord,
+    ToolTimingRecord,
     TraceRecord,
 )
 
@@ -31,6 +32,7 @@ ATTEMPTS_FILE = "attempts.jsonl"
 STEPS_FILE = "steps.jsonl"
 EVALUATIONS_FILE = "evaluations.jsonl"
 TRACES_FILE = "traces.jsonl"
+TOOL_TIMINGS_FILE = "tool_timings.jsonl"
 
 # Without these, schema_calls would silently stay 0 and every tool call would count as a query.
 DEFAULT_SCHEMA_TOOLS: dict[str, list[str]] = {
@@ -131,6 +133,13 @@ class RunStore:
 
     def traces(self) -> list[TraceRecord]:
         return _read(self.directory / TRACES_FILE, TraceRecord)
+
+    def add_tool_timings(self, timings: Iterable[ToolTimingRecord]) -> None:
+        with self._lock:
+            _append(self.directory / TOOL_TIMINGS_FILE, timings)
+
+    def tool_timings(self) -> list[ToolTimingRecord]:
+        return _read(self.directory / TOOL_TIMINGS_FILE, ToolTimingRecord)
 
     def _rollup(self) -> list[AttemptRecord]:
         attempts = self.attempts()

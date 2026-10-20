@@ -36,6 +36,7 @@ from foundry_eval.evaluators.judges import FoundryJudge
 from foundry_eval.evaluators.runner import evaluate_attempt
 from foundry_eval.net import install_dns_retry
 from foundry_eval.records import AttemptRecord, StepRecord
+from foundry_eval.tool_timings import join_proxy_timings, read_proxy_log
 
 install_dns_retry()
 
@@ -241,6 +242,7 @@ def main() -> int:
     parser.add_argument("--judge-workers", type=int, default=16)
     parser.add_argument("--no-evaluate", action="store_true", help="record attempts only; score later with evaluate_runs.py")
     parser.add_argument("--no-traces", action="store_true")
+    parser.add_argument("--proxy-log", help="arm 3 proxy's log file; its per-call timings are joined onto the tool calls")
     parser.add_argument("--batch", default=time.strftime("%Y%m%dT%H%M%S"))
     parser.add_argument("--resume", nargs="+", metavar="RUN_ID", help="continue stopped runs: only missing attempts run, unscored ones are scored")
     args = parser.parse_args()
@@ -354,6 +356,12 @@ def main() -> int:
         print(f"{arm}: {run.status} attempts={run.n_attempts} completed={run.n_completed} failed={run.n_failed} infra={run.n_infra_errors} tool_errors={run.n_tool_errors}")
     if not args.no_traces:
         join_traces(list(stores.values()))
+    if "fabric" in stores:
+        if args.proxy_log and Path(args.proxy_log).exists():
+            joined = join_proxy_timings(stores["fabric"], read_proxy_log(args.proxy_log), source="arm 3 proxy log")
+            print(f"proxy timings: joined {joined} Data Agent calls from {args.proxy_log}", flush=True)
+        else:
+            print("proxy timings: no --proxy-log given (or file missing); Data Agent call breakdown not joined", flush=True)
     ids = " ".join(s.run.run_id for s in stores.values())
     print(f"total {(time.monotonic() - started) / 60:.1f} min. Scorecard: scripts/scorecard.py {ids} --out artifacts/scorecards/{args.batch}.md", flush=True)
     return 0

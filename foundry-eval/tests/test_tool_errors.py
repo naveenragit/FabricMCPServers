@@ -180,6 +180,53 @@ def test_tool_time_comes_from_the_trace_and_parallel_spans_count_once(tmp_path):
     assert trace.tool_time_s == pytest.approx(5.0), "x (1-3s) and y (2-5s) overlap, so 1s to 5s plus 1s for z"
 
 
+def test_model_call_spans_give_tokens_cache_hits_and_a_timeline(tmp_path):
+    store = stored_run(tmp_path, failed=False)
+    base = {"rid": "resp_t", "operation_Id": "op", "success": "True", "resultCode": "0", "err": ""}
+    spans = [
+        {**base, "name": "invoke_agent a:1", "duration": 10000, "timestamp": "2026-10-20T10:00:00.000Z", "tool": ""},
+        {**base, "name": "execute_tool q", "duration": 4000, "timestamp": "2026-10-20T10:00:01.000Z", "tool": "q"},
+        {**base, "name": "chat m", "duration": 2000, "timestamp": "2026-10-20T10:00:07.000Z", "tool": "",
+         "in_tok": "21760", "out_tok": "146", "cache_read": "20101", "cache_create": "1656", "finish": '["stop"]'},
+    ]
+    [trace] = build_trace_records(store.attempts(), spans)
+    assert (trace.model_spans, trace.model_time_s) == (1, pytest.approx(2.0))
+    assert (trace.model_input_tokens, trace.model_cache_read_tokens, trace.model_cache_creation_tokens) == (21760, 20101, 1656)
+    assert trace.untraced_s == pytest.approx(4.0), "10 s agent span minus 4 s tool and 2 s model"
+    assert [(s["kind"], s["start_s"]) for s in trace.spans] == [("gap", 0.0), ("tool", 1.0), ("gap", 5.0), ("model", 7.0), ("gap", 9.0)]
+
+
+def test_proxy_timings_join_by_question_hash_and_nearest_start(tmp_path):
+    import hashlib
+
+    from foundry_eval.tool_timings import join_proxy_timings, read_proxy_log
+
+    store = RunStore.create(tmp_path, arm="fabric")
+    rec = store.recorder(question_id="q", question="How many clients?")
+    rec.record_response(
+        {"id": "resp_f", "status": "completed", "output": [
+            {"type": "mcp_call", "id": "c1", "name": "ask_fabric_data_agent", "server_label": "s",
+             "arguments": json.dumps({"question": "How many clients do we have?"}), "output": "3,000"},
+        ]},
+        elapsed_s=30.0,
+    )
+    attempt = store.add(rec)
+    sha = hashlib.sha256(b"How many clients do we have?").hexdigest()
+    started = attempt.started_at.isoformat()
+    log = tmp_path / "proxy.log"
+    log.write_text(
+        "INFO fabric_dataagent_mcp: answered in 20.0s\n"
+        f'INFO fabric_dataagent_mcp: timing {{"event": "timing", "started_at": "{started}", "question_sha256": "{sha}", '
+        '"sign_in_s": 0.0, "session_open_s": 1.1, "upstream_call_s": 18.4, "session_close_s": 0.2, "total_s": 19.7, '
+        '"is_error": false, "answer_chars": 40}\n',
+        encoding="utf-8",
+    )
+    assert join_proxy_timings(store, read_proxy_log(log), source="test") == 1
+    [timing] = store.tool_timings()
+    assert (timing.upstream_call_s, timing.session_open_s, timing.total_s) == (18.4, 1.1, 19.7)
+    assert join_proxy_timings(store, read_proxy_log(log), source="test") == 0, "a second pass adds nothing"
+
+
 def test_attempts_without_spans_yet_are_left_for_a_later_pass(tmp_path):
     store = stored_run(tmp_path, failed=True)
     records, missing = enrich_run(store, "app", query=lambda app, kql: [])

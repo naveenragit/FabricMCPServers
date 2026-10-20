@@ -1,0 +1,173 @@
+{
+  "additionalProperties": false,
+  "description": "How long one tool call took inside the tool server, by its own clock, joined from the server's log.\n\nOnly the arm 3 proxy writes this log; it splits a call into the blocks the Foundry trace cannot see.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "attempt_id": {
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "arm": {
+      "enum": [
+        "dax",
+        "sql",
+        "fabric"
+      ],
+      "title": "Arm",
+      "type": "string"
+    },
+    "step_index": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "StepRecord.index of the tool call",
+      "title": "Step Index"
+    },
+    "tool_name": {
+      "title": "Tool Name",
+      "type": "string"
+    },
+    "source": {
+      "description": "Which log the timing came from",
+      "title": "Source",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "total_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Request received to answer returned, inside the server",
+      "title": "Total S"
+    },
+    "sign_in_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Getting the upstream token (cached after the first call)",
+      "title": "Sign In S"
+    },
+    "session_open_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Opening the upstream MCP session",
+      "title": "Session Open S"
+    },
+    "tool_discovery_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Listing upstream tools; first call only",
+      "title": "Tool Discovery S"
+    },
+    "upstream_call_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The upstream service's own work: the Data Agent answering",
+      "title": "Upstream Call S"
+    },
+    "session_close_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Close S"
+    },
+    "is_error": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Is Error"
+    },
+    "answer_chars": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer Chars"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "run_id",
+    "arm",
+    "tool_name",
+    "source"
+  ],
+  "title": "ToolTimingRecord",
+  "type": "object"
+}

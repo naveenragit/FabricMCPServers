@@ -122,6 +122,97 @@
       "title": "Tool Error",
       "type": "boolean"
     },
+    "model_spans": {
+      "default": 0,
+      "description": "Model-call (chat) spans; Foundry may not emit one for every model call",
+      "title": "Model Spans",
+      "type": "integer"
+    },
+    "model_time_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Wall time covered by the model-call spans",
+      "title": "Model Time S"
+    },
+    "untraced_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Agent span time covered by no tool or model span: orchestration and untraced model calls",
+      "title": "Untraced S"
+    },
+    "model_input_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sum over model-call spans",
+      "title": "Model Input Tokens"
+    },
+    "model_output_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Output Tokens"
+    },
+    "model_cache_read_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Prompt-cache hits from the trace; the Responses API usage reports 0 here",
+      "title": "Model Cache Read Tokens"
+    },
+    "model_cache_creation_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Cache Creation Tokens"
+    },
+    "spans": {
+      "description": "Tool and model-call spans in start order: kind, name, start_s (from agent start), duration_s, success, and token counts for model calls",
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Spans",
+      "type": "array"
+    },
     "fetched_at": {
       "anyOf": [
         {
