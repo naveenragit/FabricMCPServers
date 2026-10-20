@@ -22,7 +22,7 @@ from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
 
 from .backend import POWER_BI_SCOPE, BackendError, BoundedTransport
 from .settings import Settings
-from .timing import note, phase
+from .timing import note, phase, tool_call
 
 API_ROOT = "https://api.powerbi.com/v1.0/myorg"
 
@@ -30,61 +30,88 @@ API_ROOT = "https://api.powerbi.com/v1.0/myorg"
 #: so a malformed argument fails locally instead of consuming the backend identity.
 _REQUIRED_KEYWORD = "EVALUATE"
 
+# Refresh early so a call never starts with a token about to expire mid-request.
+_TOKEN_REFRESH_MARGIN_S = 300
+
 
 class RestBackend:
     """One fixed backend identity; a bounded HTTPS client per operation."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self._cached_credential: Any = None
+        self._token: Any = None
+        self._token_lock = asyncio.Lock()
 
     def _credential(self) -> Any:
         if self.settings.credential_mode == "azure_cli":
             return AzureCliCredential(tenant_id=self.settings.tenant_id, process_timeout=20)
         return ManagedIdentityCredential(client_id=self.settings.managed_identity_client_id)
 
+    def _token_is_fresh(self) -> bool:
+        return self._token is not None and self._token.expires_on - datetime.now().timestamp() > _TOKEN_REFRESH_MARGIN_S
+
+    async def _bearer_token(self) -> str:
+        """One credential and token per process, refreshed shortly before expiry."""
+        if not self._token_is_fresh():
+            async with self._token_lock:
+                if not self._token_is_fresh():
+                    try:
+                        if self._cached_credential is None:
+                            self._cached_credential = self._credential()
+                        self._token = await self._cached_credential.get_token(POWER_BI_SCOPE)
+                    except Exception:
+                        raise BackendError("Backend sign-in is unavailable; check the configured identity") from None
+        return self._token.token
+
+    async def warm_up(self) -> None:
+        """Sign in at startup so the first query does not wait for it."""
+        with tool_call("startup_sign_in"), phase("sign_in"):
+            try:
+                await self._bearer_token()
+            except BackendError:
+                # The first query signs in again and reports the error to the caller.
+                note(is_error=True)
+
     async def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         if not self.settings.tenant_id:
             raise BackendError("Set WEALTH_MCP_TENANT_ID before connecting")
-        credential = self._credential()
-        async with credential:
+        with phase("sign_in"):
+            token = await self._bearer_token()
+        async with httpx2.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept-Encoding": "identity",
+                "Content-Type": "application/json",
+            },
+            transport=BoundedTransport(self.settings.max_response_bytes),
+            timeout=httpx2.Timeout(self.settings.timeout_seconds),
+            follow_redirects=False,
+        ) as client:
             try:
-                with phase("sign_in"):
-                    token = await credential.get_token(POWER_BI_SCOPE)
-            except Exception:
-                raise BackendError("Backend sign-in is unavailable; check the configured identity") from None
-            async with httpx2.AsyncClient(
-                headers={
-                    "Authorization": f"Bearer {token.token}",
-                    "Accept-Encoding": "identity",
-                    "Content-Type": "application/json",
-                },
-                transport=BoundedTransport(self.settings.max_response_bytes),
-                timeout=httpx2.Timeout(self.settings.timeout_seconds),
-                follow_redirects=False,
-            ) as client:
-                try:
-                    with phase("power_bi_http"):
-                        response = await client.request(method, f"{API_ROOT}{path}", json=payload)
-                except BackendError:
-                    raise
-                except Exception as exc:
-                    raise BackendError(f"Backend request failed ({type(exc).__name__})") from None
-                note(http_status=response.status_code)
-                if response.status_code == 401:
-                    raise BackendError("Backend identity was not authorized for this semantic model")
-                if response.status_code == 403:
-                    raise BackendError("Access to the semantic model was forbidden for the backend identity")
-                if response.status_code >= 400:
-                    raise BackendError(f"Power BI rejected the operation (HTTP {response.status_code})")
-                if not response.content:
-                    return {}
-                try:
-                    data = response.json()
-                except ValueError:
-                    raise BackendError("Upstream response was not valid JSON") from None
-                if not isinstance(data, dict):
-                    raise BackendError("Upstream response was not a JSON object")
-                return data
+                with phase("power_bi_http"):
+                    response = await client.request(method, f"{API_ROOT}{path}", json=payload)
+            except BackendError:
+                raise
+            except Exception as exc:
+                raise BackendError(f"Backend request failed ({type(exc).__name__})") from None
+            note(http_status=response.status_code)
+            if response.status_code == 401:
+                self._token = None
+                raise BackendError("Backend identity was not authorized for this semantic model")
+            if response.status_code == 403:
+                raise BackendError("Access to the semantic model was forbidden for the backend identity")
+            if response.status_code >= 400:
+                raise BackendError(f"Power BI rejected the operation (HTTP {response.status_code})")
+            if not response.content:
+                return {}
+            try:
+                data = response.json()
+            except ValueError:
+                raise BackendError("Upstream response was not valid JSON") from None
+            if not isinstance(data, dict):
+                raise BackendError("Upstream response was not a JSON object")
+            return data
 
     async def execute_query(self, dax_query: str) -> dict[str, Any]:
         """Run a read-only DAX query against the allowlisted semantic model."""
@@ -140,39 +167,35 @@ class RestBackend:
     async def _request_bytes(self, method: str, path: str, payload: dict[str, Any]) -> bytes:
         if not self.settings.tenant_id:
             raise BackendError("Set WEALTH_MCP_TENANT_ID before connecting")
-        credential = self._credential()
-        async with credential:
+        with phase("sign_in"):
+            token = await self._bearer_token()
+        async with httpx2.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept-Encoding": "identity",
+                "Content-Type": "application/json",
+            },
+            transport=BoundedTransport(self.settings.max_response_bytes),
+            timeout=httpx2.Timeout(self.settings.timeout_seconds),
+            follow_redirects=False,
+        ) as client:
             try:
-                with phase("sign_in"):
-                    token = await credential.get_token(POWER_BI_SCOPE)
-            except Exception:
-                raise BackendError("Backend sign-in is unavailable; check the configured identity") from None
-            async with httpx2.AsyncClient(
-                headers={
-                    "Authorization": f"Bearer {token.token}",
-                    "Accept-Encoding": "identity",
-                    "Content-Type": "application/json",
-                },
-                transport=BoundedTransport(self.settings.max_response_bytes),
-                timeout=httpx2.Timeout(self.settings.timeout_seconds),
-                follow_redirects=False,
-            ) as client:
-                try:
-                    # Includes the Fabric engine running the DAX query; the API does not report its own time.
-                    with phase("power_bi_http"):
-                        response = await client.request(method, f"{API_ROOT}{path}", json=payload)
-                except BackendError:
-                    raise
-                except Exception as exc:
-                    raise BackendError(f"Backend request failed ({type(exc).__name__})") from None
-                note(http_status=response.status_code)
-                if response.status_code == 401:
-                    raise BackendError("Backend identity was not authorized for this semantic model")
-                if response.status_code == 403:
-                    raise BackendError("Access to the semantic model was forbidden for the backend identity")
-                if response.status_code >= 400:
-                    raise BackendError(f"Power BI rejected the operation (HTTP {response.status_code})")
-                return bytes(response.content)
+                # Includes the Fabric engine running the DAX query; the API does not report its own time.
+                with phase("power_bi_http"):
+                    response = await client.request(method, f"{API_ROOT}{path}", json=payload)
+            except BackendError:
+                raise
+            except Exception as exc:
+                raise BackendError(f"Backend request failed ({type(exc).__name__})") from None
+            note(http_status=response.status_code)
+            if response.status_code == 401:
+                self._token = None
+                raise BackendError("Backend identity was not authorized for this semantic model")
+            if response.status_code == 403:
+                raise BackendError("Access to the semantic model was forbidden for the backend identity")
+            if response.status_code >= 400:
+                raise BackendError(f"Power BI rejected the operation (HTTP {response.status_code})")
+            return bytes(response.content)
 
     def _bound_rows(self, data: dict[str, Any]) -> dict[str, Any]:
         """Refuse oversized results rather than returning a silently truncated one."""

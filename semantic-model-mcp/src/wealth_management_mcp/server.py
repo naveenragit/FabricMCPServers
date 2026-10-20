@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from typing import Any, Protocol
 from uuid import UUID
@@ -451,6 +453,21 @@ class Application:
             ],
         )
         app.add_middleware(ResponseLimitMiddleware, limit=self.settings.max_response_bytes)
+        if self.rest is not None:
+            rest = self.rest
+            inner = app.router.lifespan_context
+
+            @asynccontextmanager
+            async def lifespan(starlette: Starlette) -> AsyncIterator[Any]:
+                async with inner(starlette) as state:
+                    # Background, so health checks answer while sign-in is in flight.
+                    warm_up = asyncio.create_task(rest.warm_up())
+                    try:
+                        yield state
+                    finally:
+                        warm_up.cancel()
+
+            app.router.lifespan_context = lifespan
         return app
 
 

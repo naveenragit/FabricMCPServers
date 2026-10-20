@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections.abc import Callable
@@ -74,6 +75,9 @@ class FakeRestBackend(RestBackend):
     async def report_metadata(self) -> dict[str, Any]:
         self.events.append("report_metadata")
         return {"id": IDS["report_id"], "datasetId": IDS["semantic_model_id"]}
+
+    async def warm_up(self) -> None:
+        self.events.append("warm_up")
 
 
 @pytest.fixture(autouse=True)
@@ -432,6 +436,16 @@ async def test_http_loopback_asgi_health_and_mcp_session(catalog) -> None:
             rejected = await client.post("/mcp", headers=headers,
                                          json={"jsonrpc": "2.0", "id": 4, "method": "tools/list"})
             assert rejected.status_code in {400, 403, 421}
+
+
+@pytest.mark.asyncio
+async def test_http_app_signs_in_at_startup_for_rest_backend(catalog) -> None:
+    settings = Settings(**IDS, backend="fabric_rest", tenant_id=OTHER_ID)
+    backend = FakeRestBackend(settings)
+    app = Application(settings, catalog, backend=backend).http_app()
+    async with app.router.lifespan_context(app):
+        await asyncio.sleep(0)
+        assert backend.events == ["warm_up"]
 
 
 @pytest.mark.asyncio
