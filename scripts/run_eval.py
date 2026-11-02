@@ -1,7 +1,7 @@
 """Run the evaluation dataset through the Foundry agents and record every attempt (plan section 7).
 
 Run: .\.venv\Scripts\python.exe scripts\run_eval.py --arms dax fabric --split dev --repeats 1 [--workers dax=4,fabric=8]
-    [--judge-workers 16] [--no-evaluate] [--no-traces]
+    [--judge-workers 16] [--scoring judge|deterministic] [--no-evaluate] [--no-traces]
 Each arm gets its own run under artifacts/runs/ and its own worker pool, so a slow arm does not hold back a fast one; the
 arms run at the same time. Within an arm the questions that took longest in earlier runs start first. Each finished
 attempt is scored right away (deterministic checks, the judge only where needed), and Foundry traces are joined at the
@@ -32,7 +32,7 @@ from openai import APIError
 from foundry_eval import RunStore
 from foundry_eval.agents import ARMS, POLICY_V1, STUB_ROWS
 from foundry_eval.dataset import Row, dataset_sha256, load_dataset
-from foundry_eval.evaluators import all_evaluators, config_from_env
+from foundry_eval.evaluators import SCORING_MODES, config_from_env, evaluators_for
 from foundry_eval.evaluators.judges import FoundryJudge
 from foundry_eval.evaluators.runner import evaluate_attempt
 from foundry_eval.net import install_dns_retry
@@ -43,7 +43,7 @@ install_dns_retry()
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "artifacts" / "runs"
-HARNESS_VERSION = "0.2"
+HARNESS_VERSION = "0.3"
 FULL_OUTPUT = 400_000  # keep whole tool outputs so evaluators can trace figures
 RETRY_BACKOFF_S = (20, 60, 120)  # infrastructure errors (rate limit, tunnel, connection) are retried; every try is recorded
 # Concurrency test 2026-10-20: arms 1 and 2 had no failures at 1-10 simultaneous questions; the Data Agent failed every
@@ -183,6 +183,7 @@ def make_store(project: AIProjectClient, arm_key: str, args: argparse.Namespace,
         if arm_key == "fabric"
         else {}
     )
+    environment["scoring"] = args.scoring
     if with_stub:
         environment |= stub_environment(project, arm_key)
     return RunStore.create(
@@ -193,7 +194,7 @@ def make_store(project: AIProjectClient, arm_key: str, args: argparse.Namespace,
         agent_version=str(latest["version"]),
         agent_model=os.environ.get("FOUNDRY_AGENT_MODEL"),
         reasoning_effort=os.environ.get("FOUNDRY_AGENT_REASONING_EFFORT") or None,
-        judge_model=os.environ.get("FOUNDRY_JUDGE_MODEL") or None,
+        judge_model=(os.environ.get("FOUNDRY_JUDGE_MODEL") or None) if args.scoring == "judge" else None,
         instructions_sha256=hashlib.sha256(instructions.encode()).hexdigest(),
         policy_version=f"v1:{hashlib.sha256(POLICY_V1.encode()).hexdigest()[:8]}",
         tools=[f"{arm.server_label}:{t}" for t in arm.allowed_tools],
@@ -256,6 +257,7 @@ def main() -> int:
     parser.add_argument("--workers", type=parse_workers, default=dict(DEFAULT_WORKERS), help="per-arm agent workers, e.g. dax=4,fabric=8")
     parser.add_argument("--judge-workers", type=int, default=16)
     parser.add_argument("--no-evaluate", action="store_true", help="record attempts only; score later with evaluate_runs.py")
+    parser.add_argument("--scoring", choices=SCORING_MODES, default="judge", help="deterministic: no LLM judge; undecided criteria are needs_review")
     parser.add_argument("--no-traces", action="store_true")
     parser.add_argument("--proxy-log", help="arm 3 proxy's log file; its per-call timings are joined onto the tool calls")
     parser.add_argument("--batch", default=time.strftime("%Y%m%dT%H%M%S"))
@@ -268,6 +270,7 @@ def main() -> int:
         resumed = {s.run.arm: s for s in (RunStore.open(RUNS, run_id) for run_id in args.resume)}
         first = next(iter(resumed.values())).run
         args.arms, args.split, args.repeats, args.batch = list(resumed), first.dataset_split, first.repeats, first.batch_id
+        args.scoring = first.environment.get("scoring", "judge")
     args.repeats = args.repeats or int(os.environ.get("EVAL_REPEATS", "3"))
     dataset = ROOT / "evals" / "eval-dataset.jsonl"
     rows = load_dataset(dataset)
@@ -308,8 +311,11 @@ def main() -> int:
 
     evaluators = config = judge_model = None
     if not args.no_evaluate:
-        judge_model = os.environ["FOUNDRY_JUDGE_MODEL"]
-        evaluators = all_evaluators(FoundryJudge(client, judge_model, "medium"))
+        if args.scoring == "judge":
+            judge_model = os.environ["FOUNDRY_JUDGE_MODEL"]
+            evaluators = evaluators_for("judge", FoundryJudge(client, judge_model, "medium"))
+        else:
+            evaluators = evaluators_for("deterministic")
         config = config_from_env(os.environ)
     judge_pool = ThreadPoolExecutor(max_workers=args.judge_workers)
     lock, counts = threading.Lock(), {"done": 0, "scored": 0, "score_errors": 0}
@@ -337,13 +343,13 @@ def main() -> int:
     if evaluators is not None:
         rows_by_id = {r.id: r for r in rows}
         for store in resumed.values():
-            done = {(e.attempt_id, e.evaluator) for e in store.evaluations() if e.status != "error"}
+            done = {(e.attempt_id, e.evaluator, e.evaluator_version) for e in store.evaluations() if e.status != "error"}
             steps_by: dict[str, list[StepRecord]] = defaultdict(list)
             for step in store.steps():
                 steps_by[step.attempt_id].append(step)
             backlog = 0
             for attempt in store.attempts():
-                missing = [e for e in evaluators if (attempt.attempt_id, e.name) not in done]
+                missing = [e for e in evaluators if (attempt.attempt_id, e.name, e.version) not in done]
                 row = rows_by_id.get(attempt.question_id)
                 if attempt.infra_error or not missing or row is None:
                     continue

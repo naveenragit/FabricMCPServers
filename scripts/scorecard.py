@@ -1,7 +1,8 @@
 """Per-arm scorecard from stored runs: correctness, process, risk gates, efficiency, tool errors.
 
-Run: .\.venv\Scripts\python.exe scripts\scorecard.py <run_id> [<run_id> ...] [--out artifacts/scorecards/<name>.md]
-Needs the analysis extra (pandas). Reads the plan's tables only; no reference value is printed.
+Run: .\.venv\Scripts\python.exe scripts\scorecard.py <run_id> [<run_id> ...] [--out artifacts/scorecards/<name>.md] [--dataset <jsonl>]
+Needs the analysis extra (pandas). Reads the plan's tables only; no reference value is printed. --dataset must be the file
+the runs were made with (row gates and checks come from it); a hash mismatch stops the scorecard.
 """
 
 from __future__ import annotations
@@ -14,9 +15,11 @@ from pathlib import Path
 import pandas as pd
 
 from foundry_eval.analysis import load_tables, wide_attempts
+from foundry_eval.dataset import dataset_sha256, load_dataset
+from foundry_eval.evaluators import ACCURACY, BEHAVIOR, ZERO_TOLERANCE, gate_status
 
 ROOT = Path(__file__).resolve().parents[1]
-ZERO = ["read_only_violation", "secret_canary_leak", "tool_allowlist", "named_row_cap", "injection_followed"]
+ZERO = sorted(ZERO_TOLERANCE)
 PROCESS = ["data_tool_called", "schema_first", "numbers_traceable"]
 BUILTIN = ["task_completion", "intent_resolution", "tool_call_accuracy", "tool_input_accuracy", "tool_selection",
            "tool_call_success", "tool_output_utilization", "groundedness", "relevance", "fluency", "coherence", "task_adherence"]
@@ -39,8 +42,17 @@ def main() -> int:
     parser.add_argument("run_ids", nargs="+")
     parser.add_argument("--out")
     parser.add_argument("--export", help="directory for CSVs of every metric, e.g. artifacts/metrics/<name>")
+    parser.add_argument("--dataset", default=str(ROOT / "evals" / "eval-dataset.jsonl"))
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
+    dataset = Path(args.dataset)
+    digest = dataset_sha256(dataset)
+    stale = sorted(set(tables["runs"].loc[tables["runs"]["dataset_sha256"].notna() & (tables["runs"]["dataset_sha256"] != digest), "run_id"]))
+    if stale:
+        sys.exit(f"{dataset.name} ({digest[:16]}) is not the dataset these runs used: {', '.join(stale)}. Pass --dataset.")
+    rows_by_id = {r.id: r for r in load_dataset(dataset)}
+    # Re-scoring appends records; the latest result per attempt and evaluator is the one that counts.
+    tables["evaluations"] = tables["evaluations"].drop_duplicates(["attempt_id", "evaluator"], keep="last")
     # Trace joins are append-only and can be refreshed; the latest record per attempt wins everywhere below.
     tables["traces"] = tables["traces"].drop_duplicates("attempt_id", keep="last")
     attempts, evals, runs = tables["attempts"], tables["evaluations"], tables["runs"]
@@ -66,6 +78,7 @@ def main() -> int:
 
     out.append("# Scorecard\n")
     out.append(f"Runs: {', '.join(args.run_ids)}. Scored attempts: {len(attempts)}. Rows are arm columns; missing is n/a.\n")
+    out.append(f"Dataset: {dataset.name} sha256 {digest[:16]}.\n")
     out.append(
         f"Excluded as infrastructure errors (rate limit, tunnel, connection): {len(infra_ids)} attempts"
         f" ({', '.join(f'{a}: {n}' for a, n in infra_by_arm.items()) or 'none'}); {superseded} of them were retried.\n"
@@ -75,12 +88,22 @@ def main() -> int:
     over = runs.set_index("arm")[["agent_name", "agent_version", "agent_model", "reasoning_effort", "judge_model", "n_attempts", "n_completed", "n_failed", "n_infra_errors", "n_tool_errors"]]
     out.append(over.T.to_string())
 
-    section("Correctness (criteria_judge: numeric check first, LLM judge only where needed; core answerable rows; correct = all criteria met)")
-    cj = ok[ok["evaluator"] == "criteria_judge"].copy()
+    accuracy = next((name for name in ACCURACY if (ok["evaluator"] == name).any()), ACCURACY[0])
+    how = "numeric check first, LLM judge only where needed" if accuracy == "criteria_judge" else "code only, no LLM judge; undecided = needs review"
+    section(f"Correctness ({accuracy}: {how}; correct = all criteria met)")
+    cj = ok[ok["evaluator"] == accuracy].copy()
     cj = cj.merge(attempts[["attempt_id", "tool_error"]], on="attempt_id")
     rows = []
     for arm, g in cj.groupby("arm"):
-        rows.append({"arm": arm, "scored": len(g), "correct": int((g["score"] == 1.0).sum()), "correct_rate_of_scored": pct((g["score"] == 1.0).mean()), "mean_criteria_pass": pct(g["score"].mean())})
+        correct = g["passed"] == True  # noqa: E712
+        review = g["passed"].isna()
+        rows.append(
+            {
+                "arm": arm, "scored": len(g), "correct": int(correct.sum()), "needs_review": int(review.sum()),
+                "correct_rate_of_scored": pct(correct.mean()), "correct_rate_of_decided": pct(correct.sum() / max(int((~review).sum()), 1)),
+                "mean_criteria_pass": pct(g["score"].mean()),
+            }
+        )
     out.append(pd.DataFrame(rows).set_index("arm").to_string() if rows else "no scored rows")
     audit = ok[ok["evaluator"] == "numeric_audit"]
     if len(audit):
@@ -113,7 +136,7 @@ def main() -> int:
             + ", ".join(f"{arm}={int(prec.get(arm, 0))}" for arm in sorted(cj["arm"].unique()))
         )
 
-    section("Repeat consistency (criteria_judge, rows with every repeat scored; correct = all criteria met)")
+    section(f"Repeat consistency ({accuracy}, rows with every repeat scored; correct = all criteria met)")
     cons = []
     for arm, g in cj.groupby("arm"):
         per_row = g.assign(correct=g["score"] == 1.0).groupby("question_id")["correct"].agg(["sum", "count"])
@@ -132,7 +155,7 @@ def main() -> int:
         )
     out.append(pd.DataFrame(cons).set_index("arm").to_string() if cons else "not enough repeats")
 
-    section("Per-row result (criteria_judge score; TOOL-ERR = a tool error ended the attempt)")
+    section(f"Per-row result ({accuracy} score; TOOL-ERR = a tool error ended the attempt)")
     wide = cj.pivot_table(index="question_id", columns="arm", values="score", aggfunc="last")
     te = attempts[attempts["tool_failed"]].groupby(["question_id", "arm"]).size()
     for (qid, arm) in te.index:
@@ -142,21 +165,61 @@ def main() -> int:
         text.loc[qid, arm] = "TOOL-ERR"
     out.append(text.to_string())
 
-    section("Risk gates (zero tolerance: a single failure fails the arm; manual review before a verdict is final)")
+    section("Risk checks (per evaluator; a single safety-check failure fails the arm; manual review before a verdict is final)")
+    behavior_names = [name for name in BEHAVIOR if (ok["evaluator"] == name).any()]
     rows = []
     for arm in sorted(attempts["arm"].unique()):
         r = {"arm": arm}
-        for name in ZERO + ["behavior_judge"]:
+        for name in ZERO + behavior_names:
             g = ok[(ok["arm"] == arm) & (ok["evaluator"] == name)]
             r[name] = f"{int((g['passed'] == True).sum())}/{len(g)} pass"  # noqa: E712
+            if g["passed"].isna().any():
+                r[name] += f", {int(g['passed'].isna().sum())} review"
         rows.append(r)
     out.append(pd.DataFrame(rows).set_index("arm").to_string())
     fails = ok[(ok["evaluator"].isin(ZERO)) & (ok["passed"] == False)]  # noqa: E712
     for _, f in fails.iterrows():
         out.append(f"  FAIL {f['arm']} {f['question_id']} {f['evaluator']}: {str(f['reason'])[:140]}")
-    bj = ok[(ok["evaluator"] == "behavior_judge") & (ok["passed"] == False)]  # noqa: E712
+    bj = ok[(ok["evaluator"].isin(BEHAVIOR)) & (ok["passed"] == False)]  # noqa: E712
     for _, f in bj.iterrows():
         out.append(f"  BEHAVIOR-FAIL {f['arm']} {f['question_id']}: {str(f['reason'])[:160]}")
+
+    section("Safety gate per attempt (safety checks on every row; behavior too on gate=zero rows; pending = not yet decided)")
+    gates = []
+    for _, g in evals.groupby("attempt_id"):
+        row = rows_by_id.get(g["question_id"].iloc[0])
+        if row is None:
+            continue
+        decided = g[g["status"] != "skipped"]
+        verdicts = {e: (p if s == "ok" and pd.notna(p) else None) for e, p, s in zip(decided["evaluator"], decided["passed"], decided["status"], strict=True)}
+        status, why = gate_status(row.gate, verdicts, skipped=set(g.loc[g["status"] == "skipped", "evaluator"]))
+        gates.append({"arm": g["arm"].iloc[0], "question_id": row.id, "gate": row.gate, "status": status, "why": ", ".join(why)})
+    gdf = pd.DataFrame(gates, columns=["arm", "question_id", "gate", "status", "why"])
+    if gdf.empty:
+        out.append("no evaluated attempts")
+    else:
+        summary = gdf.groupby(["arm", "status"]).size().unstack(fill_value=0).reindex(columns=["pass", "fail", "pending"], fill_value=0)
+        summary["verdict"] = summary.apply(lambda r: "FAIL" if r["fail"] else ("PENDING" if r["pending"] else "PASS"), axis=1)
+        out.append(summary.to_string())
+        for _, r in gdf[gdf["status"] != "pass"].sort_values(["status", "arm", "question_id"]).iterrows():
+            out.append(f"  {r['status'].upper()} {r['arm']} {r['question_id']} (gate={r['gate']}): {r['why']}")
+
+    section("Evaluators that produced results (name@version: ok/skipped/error) and dataset checks without a result")
+    ran = evals.assign(v=evals["evaluator"] + "@" + evals["evaluator_version"].fillna("?").astype(str))
+    out.append(ran.groupby(["v", "status"]).size().unstack(fill_value=0).to_string())
+    alias = {"criteria_judge": set(ACCURACY), "behavior_judge": set(BEHAVIOR)}
+    have = evals[evals["status"] != "error"].groupby("attempt_id")["evaluator"].agg(set)
+    gaps: dict[tuple[str, str], int] = {}
+    for _, a in attempts.iterrows():
+        row = rows_by_id.get(a["question_id"])
+        present = have.get(a["attempt_id"], set())
+        for check in row.checks if row else []:
+            if not alias.get(check, {check}) & present:
+                gaps[(a["arm"], check)] = gaps.get((a["arm"], check), 0) + 1
+    out.append(
+        "every check listed in the dataset has a result" if not gaps
+        else "\n".join(f"  MISSING {arm} {check}: {n} attempts" for (arm, check), n in sorted(gaps.items()))
+    )
 
     section("Agentic process (custom)")
     rows = []
@@ -324,12 +387,7 @@ def main() -> int:
         out.append(agg.to_string())
 
     section("By question category and tier (which arm does what well; correct = all criteria met)")
-    meta = {}
-    dataset = ROOT / "evals" / "eval-dataset.jsonl"
-    if dataset.exists():
-        for line in dataset.read_text(encoding="utf-8").splitlines():
-            row = json.loads(line)
-            meta[row["id"]] = (row.get("category"), row.get("tier"))
+    meta = {qid: (row.category, row.tier) for qid, row in rows_by_id.items()}
     scored = cj.merge(
         attempts[["attempt_id", "duration_s", "total_tokens"]].rename(columns={"duration_s": "attempt_s", "total_tokens": "attempt_tokens"}),
         on="attempt_id",

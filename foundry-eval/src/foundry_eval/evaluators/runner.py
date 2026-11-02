@@ -70,17 +70,17 @@ def evaluate_run(
     judge_model: str | None = None,
     skip_done: bool = True,
 ) -> list[EvaluationRecord]:
-    """Evaluate every attempt in the run that has a dataset row; re-running skips finished evaluator/attempt pairs."""
+    """Evaluate every attempt in the run that has a dataset row; re-running skips finished evaluator versions."""
     steps_by_attempt: dict[str, list[StepRecord]] = {}
     for step in store.steps():
         steps_by_attempt.setdefault(step.attempt_id, []).append(step)
-    done = {(e.attempt_id, e.evaluator) for e in store.evaluations() if e.status == "ok"} if skip_done else set()
+    done = {(e.attempt_id, e.evaluator, e.evaluator_version) for e in store.evaluations() if e.status == "ok"} if skip_done else set()
     written: list[EvaluationRecord] = []
     for attempt in store.attempts():
         row = rows_by_id.get(attempt.question_id)
         if row is None:
             continue
-        pending = [e for e in evaluators if (attempt.attempt_id, e.name) not in done]
+        pending = [e for e in evaluators if (attempt.attempt_id, e.name, e.version) not in done]
         if not pending:
             continue
         records = evaluate_attempt(

@@ -15,7 +15,7 @@ from typing import Any, Protocol
 
 from ..agents import POLICY_V1
 from ..dataset import Criterion
-from ..numbers import Want, extract_numbers, find_match, low_precision
+from ..numbers import Num, Want, extract_numbers, low_precision, matches
 from .base import Case, Evaluator, Outcome, parse_json_object, skipped
 
 _TRANSIENT = ("getaddrinfo", "Connection", "Timeout", "RateLimit", "InternalServer", "APIConnection")
@@ -92,14 +92,44 @@ def _criteria_block(case: Case, ask: list[Criterion]) -> str:
 
 # A figure tied to a name, rank or order can be present yet attached to the wrong item; only the judge can see that.
 _LABEL_TIED = re.compile(r"\b(identify|names?|named|list|in order|rank\w*|top|highest|lowest|largest|smallest|most|least|leader|show)\b|'s\b", re.IGNORECASE)
+_NEGATED = re.compile(r"\b(not|n't|never|instead of|rather than|incorrect|wrong|exclud\w*|unfiltered|versus|vs\.?)\b", re.IGNORECASE)
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n")
 
 
-def numeric_verdicts(case: Case, graded: list[Criterion]) -> dict[str, dict[str, Any]]:
+def _same_class(kind: str, num: Num) -> bool:
+    if kind == "percent":
+        return num.percent
+    if kind == "amount":
+        return not num.percent and (num.money or num.scaled)
+    return not num.percent and not num.money
+
+
+def _rival(want: Want, kind: str, numbers: list[Num]) -> Num | None:
+    """Another figure that could be the same quantity: same kind, not a match, within a factor of two."""
+    for num in numbers:
+        if matches(want, num) or not _same_class(kind, num) or not want.value:
+            continue
+        if 0.5 <= abs(num.value) / abs(want.value) <= 2:
+            return num
+    return None
+
+
+def _negated(answer: str, text: str) -> bool:
+    at = answer.find(text)
+    if at < 0:
+        return False
+    before = _SENTENCE_BREAK.split(answer[:at])[-1]
+    after = _SENTENCE_BREAK.split(answer[at:])[0]
+    return bool(_NEGATED.search(before + after))
+
+
+def numeric_verdicts(case: Case, graded: list[Criterion], *, settle_failures: bool = False) -> dict[str, dict[str, Any]]:
     """Fact criteria settled without the judge: the expected figure is in the answer at three or more significant figures.
 
     Only a criterion asking for one standalone figure is settled: not one tied to a name, rank or order, and not one whose
-    row expects another figure of the same kind, which the answer could swap with it. Only passes are settled; a figure
-    that is not found may be there in a form the parser misses, so it goes to the judge.
+    row expects another figure of the same kind, which the answer could swap with it. A figure that is negated, or that
+    competes with another plausible value for the same quantity, is not settled. A figure that is not found may be there in
+    a form the parser misses, so it is only failed with settle_failures, when a rival figure stands in its place.
     """
     numbers = extract_numbers(case.answer)
     kinds = Counter(e.kind for e in case.row.expected)
@@ -109,33 +139,42 @@ def numeric_verdicts(case: Case, graded: list[Criterion]) -> dict[str, dict[str,
         if criterion.kind != "fact" or len(wants) != 1 or kinds[wants[0].kind] > 1 or _LABEL_TIED.search(criterion.instruction):
             continue
         e = wants[0]
-        got = find_match(Want(e.value, e.kind, e.tol_abs, e.tol_rel, e.sign_free, e.unit), numbers)
-        if got is None or low_precision(got):
-            continue
-        settled[criterion.id] = {
-            "met": True,
-            "kind": criterion.kind,
-            "quote": got.text,
-            "reason": "expected figure found in the answer",
-            "source": "numeric",
-        }
+        want = Want(e.value, e.kind, e.tol_abs, e.tol_rel, e.sign_free, e.unit)
+        found = [n for n in numbers if matches(want, n)]
+        precise = [n for n in found if not low_precision(n)]
+        rival = _rival(want, e.kind, numbers)
+        if precise and rival is None and not any(_negated(case.answer, n.text) for n in precise):
+            settled[criterion.id] = {
+                "met": True, "kind": criterion.kind, "quote": precise[0].text, "reason": "expected figure found in the answer", "source": "numeric",
+            }
+        elif settle_failures and not found and rival is not None and not _negated(case.answer, rival.text):
+            settled[criterion.id] = {
+                "met": False, "kind": criterion.kind, "quote": rival.text, "reason": "the answer gives a different figure", "source": "numeric",
+            }
     return settled
 
 
-def make_criteria_judge(judge: Judge, *, numeric_first: bool = True) -> Evaluator:
-    """numeric_first=False sends every criterion to the judge, as the G8 calibration needs."""
+def make_criteria_judge(judge: Judge | None, *, numeric_first: bool = True) -> Evaluator:
+    """numeric_first=False sends every criterion to the judge, as the G8 calibration needs.
+
+    With no judge this is criteria_check: code settles what it can and every other criterion is needs_review, so the
+    attempt is passed only when every criterion is settled, failed when any settled criterion fails, and otherwise pending.
+    """
 
     def run(case: Case) -> Outcome:
         graded = [c for c in case.row.criteria if c.kind in ("fact", "trap", "behavior") and c.weight > 0]
         if not graded:
             return skipped("no scored criteria on this row")
         if not case.answer:
-            verdicts = {c.id: {"met": False, "quote": "", "reason": "no answer text", "source": "none"} for c in graded}
-            return Outcome(0.0, "no answer text", passed=False, details={"criteria": verdicts, "judge_used": False})
-        verdicts: dict[str, Any] = numeric_verdicts(case, graded) if numeric_first else {}
+            missing = {c.id: {"met": False, "quote": "", "reason": "no answer text", "source": "none"} for c in graded}
+            return Outcome(0.0, "no answer text", passed=False, details={"criteria": missing, "judge_used": False})
+        verdicts: dict[str, Any] = numeric_verdicts(case, graded, settle_failures=judge is None) if numeric_first else {}
         ask = [c for c in graded if c.id not in verdicts]
         tokens_in = tokens_out = None
-        if ask:
+        if ask and judge is None:
+            for criterion in ask:
+                verdicts[criterion.id] = {"met": None, "kind": criterion.kind, "quote": "", "reason": "code cannot decide this criterion", "source": "needs_review"}
+        elif ask and judge is not None:
             user = (
                 f"Question:\n{case.row.query}\n\nReference answer:\n{case.row.ground_truth or '(none; judge by the criteria)'}\n\n"
                 f"Criteria:\n{_criteria_block(case, ask)}\n\nAssistant's final answer:\n{case.answer}"
@@ -160,19 +199,35 @@ def make_criteria_judge(judge: Judge, *, numeric_first: bool = True) -> Evaluato
                     "source": "judge",
                 }
         total = sum(c.weight for c in graded)
-        earned = sum(c.weight for c in graded if verdicts[c.id]["met"])
-        score = earned / total
-        failed = [c.id for c in graded if not verdicts[c.id]["met"]]
+        earned = sum(c.weight for c in graded if verdicts[c.id]["met"] is True)
+        failed = [c.id for c in graded if verdicts[c.id]["met"] is False]
+        pending = [c.id for c in graded if verdicts[c.id]["met"] is None]
+        if failed:
+            reason, passed = "not met: " + ", ".join(failed), False
+        elif pending:
+            reason, passed = "needs review: " + ", ".join(pending), None
+        else:
+            reason, passed = "all criteria met", True
         return Outcome(
-            score,
-            "all criteria met" if not failed else "not met: " + ", ".join(failed),
-            passed=score == 1.0,
-            details={"criteria": verdicts, "judge_used": bool(ask)},
+            earned / total,
+            reason,
+            passed=passed,
+            label="needs_review" if passed is None else None,
+            details={"criteria": verdicts, "judge_used": bool(ask) and judge is not None, "needs_review": pending},
             judge_input_tokens=tokens_in,
             judge_output_tokens=tokens_out,
         )
 
-    return Evaluator("criteria_judge", "custom_prompt", "accuracy", run, version="2" if numeric_first else "1")
+    if judge is None:
+        return Evaluator("criteria_check", "custom_code", "accuracy", run)
+    return Evaluator("criteria_judge", "custom_prompt", "accuracy", run, version="3" if numeric_first else "1")
+
+
+def behavior_review(case: Case) -> Outcome:
+    """No-judge mode: an expected behavior cannot be decided by code, so the attempt joins the human review queue."""
+    if not case.row.expected_behavior:
+        return skipped("no expected behavior on this row")
+    return Outcome(None, "awaiting human review of the expected behavior", label="needs_review")
 
 
 def make_behavior_judge(judge: Judge) -> Evaluator:
@@ -201,4 +256,6 @@ def make_behavior_judge(judge: Judge) -> Evaluator:
     return Evaluator("behavior_judge", "custom_prompt", "risk", run)
 
 
-__all__ = ["BEHAVIOR_SYSTEM", "CRITERIA_SYSTEM", "FoundryJudge", "Judge", "make_behavior_judge", "make_criteria_judge", "numeric_verdicts"]
+__all__ = [
+    "BEHAVIOR_SYSTEM", "CRITERIA_SYSTEM", "FoundryJudge", "Judge", "behavior_review", "make_behavior_judge", "make_criteria_judge", "numeric_verdicts",
+]

@@ -8,12 +8,15 @@ import re
 from ..agents import ARMS
 from .base import EvalConfig, Evaluator
 from .deterministic import DETERMINISTIC
-from .judges import Judge, make_behavior_judge, make_criteria_judge
+from .gates import BEHAVIOR, ZERO_TOLERANCE, gate_status
+from .judges import Judge, behavior_review, make_behavior_judge, make_criteria_judge
 from .runner import evaluate_attempt, evaluate_run
 
 _GUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
 SCHEMA_TOOLS = {"dax": ["get_semantic_model_schema"], "sql": ["get_database_schema"], "fabric": []}
+SCORING_MODES = ("judge", "deterministic")
+ACCURACY = ("criteria_judge", "criteria_check")
 
 
 def config_from_env(env: dict[str, str] | None = None) -> EvalConfig:
@@ -34,4 +37,20 @@ def all_evaluators(judge: Judge) -> list[Evaluator]:
     return [*DETERMINISTIC, make_criteria_judge(judge), make_behavior_judge(judge)]
 
 
-__all__ = ["EvalConfig", "Evaluator", "all_evaluators", "config_from_env", "evaluate_attempt", "evaluate_run"]
+def deterministic_evaluators() -> list[Evaluator]:
+    """No LLM judge: code-only checks, with undecided criteria and behaviors marked needs_review."""
+    return [*DETERMINISTIC, make_criteria_judge(None), Evaluator("behavior_review", "human", "risk", behavior_review)]
+
+
+def evaluators_for(mode: str, judge: Judge | None = None) -> list[Evaluator]:
+    if mode == "deterministic":
+        return deterministic_evaluators()
+    if judge is None:
+        raise ValueError("judge scoring needs a judge")
+    return all_evaluators(judge)
+
+
+__all__ = [
+    "ACCURACY", "BEHAVIOR", "SCORING_MODES", "ZERO_TOLERANCE", "EvalConfig", "Evaluator", "all_evaluators", "config_from_env",
+    "deterministic_evaluators", "evaluate_attempt", "evaluate_run", "evaluators_for", "gate_status",
+]
