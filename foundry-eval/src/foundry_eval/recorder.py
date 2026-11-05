@@ -121,8 +121,10 @@ def _infra_message(message: str | None) -> bool:
 _TOOL_ERROR = re.compile(r"An error occurred invoking '([^']+)'\s*:?\s*(.*)")
 # The Data Agent's fast rejection under sustained load (full run 2026-10-14: every call failed in about 5 s once ~10
 # questions ran at once, and it answered again as soon as the load stopped). It is our load, not the arm's answer, so it
-# is retried as infrastructure; the tool error fields are still recorded.
-_UPSTREAM_OVERLOAD = re.compile(r"The Data Agent run failed before producing a result", re.IGNORECASE)
+# is retried as infrastructure; the tool error fields are still recorded. Fabric capacity throttling (-32002, full-4) is the
+# same kind of failure.
+_UPSTREAM_OVERLOAD = re.compile(
+    r"The Data Agent run failed before producing a result|Fabric compute capacity has exceeded its limits", re.IGNORECASE)
 
 
 def _tool_error_from_message(message: str | None) -> tuple[str, str] | None:

@@ -208,6 +208,9 @@ def test_rate_limit_and_failed_dependency_are_infra_but_a_tool_error_is_not():
     assert not attempt_for("The model deployment encountered an error processing your request. You can retry.").infra_error
     overload = attempt_for("An error occurred invoking 'ask_fabric_data_agent': The Data Agent run failed before producing a result.")
     assert overload.tool_error and overload.infra_error, "the Data Agent's load rejection is retried, and still recorded"
+    throttled = attempt_for("An error occurred invoking 'ask_fabric_data_agent': Fabric endpoint returned an MCP error (-32002): "
+                            "Your organization's Fabric compute capacity has exceeded its limits. Try again later.")
+    assert throttled.tool_error and throttled.infra_error
 
 
 def test_a_408_from_foundry_is_a_retried_timeout():
