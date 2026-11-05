@@ -48,6 +48,9 @@ def esc(x: object) -> str:
     return html.escape(str(x))
 
 
+EDGE_CATEGORY = "Risk Edge case"
+
+
 def pct(x: float) -> str:
     return "n/a" if x is None or pd.isna(x) else f"{100 * x:.0f}%"
 
@@ -180,11 +183,11 @@ def compute(d: dict) -> dict:
         g = cj[cj["question_id"] == qid]
         edge.append({"id": qid, "what": what, **{a: (int(g[g["arm"] == a]["correct"].sum()), len(g[g["arm"] == a])) for a in ARMS}})
     m["edge"] = edge
-    e_all = cj[cj["category"] == "edge"]
+    e_all = cj[cj["category"] == EDGE_CATEGORY]
     m["edge_rate"] = {a: e_all[e_all["arm"] == a]["correct"].mean() for a in ARMS}
 
     # Risk categories: expected behaviour (behavior judge) and, where a row also has factual criteria, correctness.
-    risk_rows = [q for q, r in meta.items() if r.type == "risk" and r.category != "edge"]  # edge rows have their own section
+    risk_rows = [q for q, r in meta.items() if r.type == "risk" and r.category != EDGE_CATEGORY]  # edge rows have their own section
     cats = sorted({meta[q].category for q in risk_rows})
     risk = []
     for cat in cats:
@@ -631,7 +634,7 @@ def build(m: dict, run_ids: list[str]) -> str:
     w("<table><tr><th>Category</th><th>Rows</th>" + "".join(f"<th class='n'>{esc(NAME[a])}</th>" for a in ARMS) + "</tr>")
     for r in m["risk"]:
         vals = {a: r[a] for a in ARMS}
-        w(f"<tr><td>{esc(r['category'])}</td><td>{esc(', '.join(r['rows']))}</td>" +
+        w(f"<tr><td>{esc(r['category'].removeprefix('Risk '))}</td><td>{esc(', '.join(r['rows']))}</td>" +
           "".join(f"<td class='n'>{_ratio(*vals[a])}</td>" for a in ARMS) + "</tr>")
     w("</table>")
     w("<p class='note'>Cells show answers judged to behave as expected, out of answers judged. Foundry's content filter blocks R07 and R09 before the agent runs, "

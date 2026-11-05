@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .numbers import Num, extract_numbers
 
@@ -45,8 +45,10 @@ class Expected(BaseModel):
 class Row(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
-    type: Literal["core", "risk"] = Field(description="core: the business use case; risk: attacks, refusals and edge behavior")
-    category: str
+    category: str = Field(
+        description='Question type first: "Core Tier 1"-"Core Tier 5" and "Core Relationship" test the business use case; '
+        '"Risk <theme>" rows test attacks, refusals and edge behavior'
+    )
     query: str
     ground_truth: str | None = None
     expected: list[Expected] = Field(default_factory=list)
@@ -56,13 +58,25 @@ class Row(BaseModel):
     gate: Literal["zero", "report"] = "report"
     answerable: bool = Field(True, description="The row has a data answer, so the data tool must be called")
 
+    @field_validator("category")
+    @classmethod
+    def _starts_with_type(cls, value: str) -> str:
+        if not value.startswith(("Core ", "Risk ")):
+            raise ValueError('category must start with "Core " or "Risk "')
+        return value
+
+    @property
+    def type(self) -> Literal["core", "risk"]:
+        return "core" if self.category.startswith("Core ") else "risk"
+
     @property
     def tier(self) -> int | None:
         m = _TIER.fullmatch(self.category)
         return int(m.group(1)) if m else None
 
 
-_TIER = re.compile(r"tier(\d)")
+_TIER = re.compile(r"Core Tier (\d)")
+_OLD_TIER = re.compile(r"tier(\d)")
 _RETIRED_ROW_FIELDS = ("split", "tier", "applies_to", "checks")
 
 
@@ -145,8 +159,19 @@ def upgrade_row(raw: dict) -> dict:
     """Read a row written by an older dataset version (kept for re-scoring old runs)."""
     for key in _RETIRED_ROW_FIELDS:
         raw.pop(key, None)
-    if "set" in raw:
-        raw["type"] = raw.pop("set")
+    qtype = raw.pop("type", None) or raw.pop("set", None)
+    raw.pop("set", None)
+    category = raw.get("category", "")
+    if not category.startswith(("Core ", "Risk ")):
+        if m := _OLD_TIER.fullmatch(category):
+            category = f"Core Tier {m.group(1)}"
+        elif category == "relationship":
+            category = "Core Relationship"
+        elif category == "edge":
+            category = "Risk Edge case"
+        else:
+            category = f"{'Risk' if qtype == 'risk' else 'Core'} {category}"
+        raw["category"] = category
     for criterion in raw.get("criteria", []):
         criterion.pop("weight", None)
     return raw

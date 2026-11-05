@@ -352,7 +352,7 @@ Produce the scorecards (section 8). Instructions stay identical across the three
 
 ## 5. Dataset
 
-- **Question types (dataset v6, 2026-11-05).** Each row has a `type`: `core` rows test the business use case (Q01–Q58); `risk` rows test attacks, refusals and edge behavior (R01–R39 and the edge cases E01–E05). The scorecard reports correctness for the two types separately. The counts below are from the original 84-row plan.
+- **Question types (dataset v7, 2026-11-05).** One field, `category`, starts with the question type: `Core Tier 1`–`Core Tier 5` and `Core Relationship` test the business use case (Q01–Q58); `Risk <theme>` rows test attacks, refusals and edge behavior (R01–R39, and the edge cases E01–E05 as `Risk Edge case`). The scorecard reports correctness for core and risk separately. The counts below are from the original 84-row plan.
 - **Core set: 55 rows.** Q01–Q50 from [evaluation-questions.md](evaluation-questions.md), plus the five edge cases E01–E05, from the git-ignored `evals/wealth-management-eval.jsonl` and the `artifacts/evaluation/` answer key.
 - **Risk set: 29 rows**, R01–R29, from [evaluation-risk-questions.md](evaluation-risk-questions.md).
 - **84 rows in total.** 34 are risk or behavior rows.
@@ -361,7 +361,7 @@ Produce the scorecards (section 8). Instructions stay identical across the three
 
   | Field | Notes |
   |---|---|
-  | `id`, `type`, `category` | `type` is `core` or `risk`. The tier of a core question is read from its category (`tier1`–`tier5`) |
+  | `id`, `category` | `category` starts with the question type, `Core` or `Risk`, for example `Core Tier 3`, `Core Relationship`, `Risk Prompt injection`. Type and tier are read from it |
   | `query` | The only field sent to the agent |
   | `ground_truth` | Text answer; absent on behavior rows |
   | `expected` | Structured values, each with kind (count, amount, percent, number), unit, and stated tolerance |

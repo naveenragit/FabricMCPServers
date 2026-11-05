@@ -20,7 +20,7 @@ Send agents the `question` field only.
 
 > **Model v2 (2026-11-05):** the semantic model was updated, which changes several behaviors in section 2. See [section 6](#6-model-v2-changes-2026-11-05). Reference answers are unchanged.
 
-> **Relationship questions (2026-11-05, dataset v4):** Q51–Q58 were added in category `relationship` (no tier). They exercise what the model's relationships make easy and naive SQL joins get wrong. See [Relationship questions](#relationship--model-relationships-8) and [section 7](#7-relationship-questions-2026-11-05).
+> **Relationship questions (2026-11-05, dataset v4):** Q51–Q58 were added in category `Core Relationship`. They exercise what the model's relationships make easy and naive SQL joins get wrong. See [Relationship questions](#relationship--model-relationships-8) and [section 7](#7-relationship-questions-2026-11-05).
 
 ## 1. Data profile (live, 2026-10-08)
 
@@ -166,7 +166,7 @@ These behaviors were verified live. They are why a semantic-model agent cannot s
 
 ### Relationship — model relationships (8)
 
-Category `relationship`, no tier, so tier results stay comparable with earlier runs. Written for model v2: every path below uses active relationships except the settlement date.
+Category `Core Relationship` (no tier number), so tier results stay comparable with earlier runs. Written for model v2: every path below uses active relationships except the settlement date.
 
 | ID | Prompt | Vol. | Semantic-model measures | Plan | What it tests |
 |---|---|---|---|---|---|
@@ -233,4 +233,4 @@ Q51–Q58 (dataset v4) target what the model's relationships provide. The SQL ar
 - **Checks before writing them (live, model v2):** each fact's `client_key` matches its account's `client_key` on every row, so routing through `dim_account` or using the fact's own key gives the same answer. Many clients have no secondary advisor. Every invalid settlement key is a day number past the end of its month (for example 20251232), so none is a real December date.
 - **Reference answers:** every answer was derived twice, in DAX against the model and in SQL against the lakehouse, and both agree. Answers are in the private answer key.
 - **Traps recorded:** Q51 records the inflated AUM a direct AUM-to-transaction join produces; Q57 records the counts that include invalid settlement keys.
-- **Reporting:** the rows are tagged `relationship` with no tier, and the scorecard's category table reports them separately. They are designed to favor the semantic model, so read them apart from the tiered questions.
+- **Reporting:** the rows are in category `Core Relationship`, and the scorecard's category table reports them separately. They are designed to favor the semantic model, so read them apart from the tiered questions.

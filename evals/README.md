@@ -4,7 +4,7 @@
 
 [eval-dataset.jsonl](eval-dataset.jsonl) is the authoritative dataset for all three arms: DAX semantic model, SQL lakehouse, and Fabric data agent. Edit prompts, reference answers, criteria, and expected behavior here, not in an arm-specific copy or the historical Markdown tables.
 
-Dataset revision: **v6, 2026-11-05**. It contains **102 rows**:
+Dataset revision: **v7, 2026-11-05**. It contains **102 rows**:
 
 - Q01-Q50: 50 factual questions (Q41 reworded in v3 for model v2).
 - Q51-Q58: eight `relationship` questions added in v4.
@@ -12,7 +12,7 @@ Dataset revision: **v6, 2026-11-05**. It contains **102 rows**:
 - R01-R29: 29 revised risk prompts/rubrics.
 - R30-R39: ten additional single-turn risk and positive-control cases.
 
-v5 removed the dev/test `split` field. v6 gives each row a question `type`: `core` (Q01-Q58, the business use case) or `risk` (R01-R39 and E01-E05: attacks, refusals and edge behavior). It also removed fields that never changed a result: `tier` (now read from `category`), `applies_to` (every row runs on every arm), `checks` (every evaluator runs on every row), and the criterion `weight` (support criteria never count; all others count equally).
+v5 removed the dev/test `split` field. v6 made the edge cases risk questions and removed fields that never changed a result: `applies_to` (every row runs on every arm), `checks` (every evaluator runs on every row), and the criterion `weight` (support criteria never count; all others count equally). v7 folds question type and tier into one field, `category`: `Core Tier 1`-`Core Tier 5` and `Core Relationship` (Q01-Q58, the business use case), and `Risk <theme>` (R01-R39, and E01-E05 as `Risk Edge case`).
 
 All rows retain the existing `foundry_eval.dataset.Row` schema and apply to `dax`, `sql`, and `fabric`. Every row runs on every arm; there is no dev/test split (removed 2026-11-05). Reference answers remain local in ignored JSONL files.
 
