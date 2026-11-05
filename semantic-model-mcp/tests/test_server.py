@@ -229,11 +229,14 @@ async def test_rest_schema_is_compact_by_default_and_full_on_request(catalog) ->
     app = Application(settings, catalog, backend=FakeRestBackend(settings))
     args = {"model_id": IDS["semantic_model_id"]}
     async with Client(app.server(), cache=None) as client:
-        compact = (await client.call_tool("get_semantic_model_schema", args)).structured_content
-        full = (await client.call_tool("get_semantic_model_schema", {**args, "detail": "full"})).structured_content
+        compact_result = await client.call_tool("get_semantic_model_schema", args)
+        full_result = await client.call_tool("get_semantic_model_schema", {**args, "detail": "full"})
         bad = await client.call_tool("get_semantic_model_schema", {**args, "detail": "everything"})
-    assert full == catalog
+    # Foundry passes content and structuredContent to the model, so successes carry text only.
+    assert compact_result.structured_content is None and full_result.structured_content is None
+    assert json.loads(full_result.content[0].text) == catalog
     assert bad.is_error
+    compact = app.compact_catalog
     assert compact["view"] == "compact" and compact["profile_id"] == PROFILE_ID
     assert [table["name"] for table in compact["tables"]] == ["dim_item", "fact_event"]
     # Catalog canonical names are not valid DAX; the compact view must expose the invokable name.
@@ -241,10 +244,15 @@ async def test_rest_schema_is_compact_by_default_and_full_on_request(catalog) ->
                                     "expression": " DIVIDE(SUM('fact_event'[value]), 2)\n"}]
     assert compact["relationships"] == [{"from": "'fact_event'[item_id]", "to": "'dim_item'[item_id]",
                                          "active": False, "cross_filter": "single"}]
-    text = json.dumps(compact)
+    text = compact_result.content[0].text
+    assert text.startswith(f"Semantic model sm_wealth_mgmt_import ({PROFILE_ID} ")
+    assert "[Value %] (dim_item) = DIVIDE(SUM('fact_event'[value]), 2)\n" in text
+    assert "'fact_event'[item_id] -> 'dim_item'[item_id] [INACTIVE]\n" in text
+    for note in compact["notes"]:
+        assert f"- {note}" in text
     for leaked in ("PRIVATE_", "lineage_tag", "artifact_sha256", "source_pointer", "custom_extensions"):
         assert leaked not in text
-    assert len(text) * 3 < len(json.dumps(catalog))
+    assert len(text) < len(json.dumps(compact)) and len(text) * 3 < len(json.dumps(catalog))
 
 
 @pytest.mark.asyncio

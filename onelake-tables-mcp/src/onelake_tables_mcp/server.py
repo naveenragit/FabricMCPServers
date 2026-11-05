@@ -59,6 +59,11 @@ def result_data(data: dict[str, Any], *, error: bool = False) -> CallToolResult:
     return CallToolResult(content=[TextContent(type="text", text=text)], structured_content=data, is_error=error)
 
 
+def result_text(data: dict[str, Any]) -> CallToolResult:
+    # Foundry passes both content and structuredContent to the model, so successful results carry one copy.
+    return CallToolResult(content=[TextContent(type="text", text=json.dumps(data, ensure_ascii=False, separators=(",", ":")))])
+
+
 class Application:
     def __init__(self, settings: Settings, backend: SqlBackend | None = None) -> None:
         self.settings = settings
@@ -92,8 +97,8 @@ class Application:
                     raise BackendError("get_database_schema takes no arguments")
                 data = await self.backend.database_schema()
             with phase("serialize"):
-                result = result_data(data)
-                too_big = len(result.content[0].text.encode("utf-8")) * 2 + 4096 > self.settings.max_response_bytes
+                result = result_text(data)
+                too_big = len(result.content[0].text.encode("utf-8")) + 4096 > self.settings.max_response_bytes
             if too_big:
                 raise BackendError("Result exceeds the response byte budget; aggregate or filter further")
             result.meta = {"onelake-tables-mcp/provenance": {

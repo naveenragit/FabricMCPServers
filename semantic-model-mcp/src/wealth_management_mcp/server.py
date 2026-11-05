@@ -37,7 +37,14 @@ from .backend import BackendError, RemoteBackend
 from .contracts import ContractManifest, argument_value, load_manifest, local_validator
 from .diagnostics import identity_report, network_report
 from .http_limits import ResponseLimitMiddleware
-from .profile import PROFILE_ID, canonical_json_bytes, compact_schema, load_profile_schema, validate_catalog
+from .profile import (
+    PROFILE_ID,
+    canonical_json_bytes,
+    compact_schema,
+    compact_schema_text,
+    load_profile_schema,
+    validate_catalog,
+)
 from .responses import verify_native_response
 from .rest_backend import RestBackend
 from .settings import Settings
@@ -105,11 +112,6 @@ def rest_tools(enable_effective_username_test: bool = False) -> dict[str, Tool]:
                     "detail": {"type": "string", "enum": ["compact", "full"], "default": "compact"},
                 },
             },
-            output_schema={
-                "type": "object",
-                "required": ["profile_id", "profile_version"],
-                "properties": {"profile_id": {"const": PROFILE_ID}, "view": {"const": "compact"}},
-            },
             annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False),
         ),
         "get_report_metadata": Tool(
@@ -166,6 +168,12 @@ def result_data(data: dict[str, Any], *, error: bool = False) -> CallToolResult:
     )
 
 
+def result_text(data: dict[str, Any] | str) -> CallToolResult:
+    # Foundry passes both content and structuredContent to the model, so successful results carry one copy.
+    text = data if isinstance(data, str) else canonical_json_bytes(data).decode("utf-8")
+    return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
 class Application:
     """Separate transport dispatch from the offline catalog and native backend."""
 
@@ -177,6 +185,7 @@ class Application:
         self.settings = settings
         self.catalog = deepcopy(catalog)
         self.compact_catalog = compact_schema(self.catalog)
+        self.compact_text = compact_schema_text(self.compact_catalog)
         self.manifest = manifest
         self.rest: RestBackend | None = backend if isinstance(backend, RestBackend) else None
         self.backend: Backend | None = None if isinstance(backend, RestBackend) else backend
@@ -330,6 +339,7 @@ class Application:
             if role == "get_semantic_model_schema" and not self.settings.allow_author_catalog:
                 raise BackendError("Author-catalog disclosure to the fixed POC audience requires explicit approval")
             assert self.rest is not None
+            data: dict[str, Any] | str
             async with asyncio.timeout(self.settings.timeout_seconds):
                 if params.name == "execute_dax_query_as_user":
                     assert effective_username is not None
@@ -342,9 +352,9 @@ class Application:
                     data = await self.rest.report_metadata()
                 else:
                     # A catalog read is an author snapshot; it never proves live definition equality.
-                    data = self.catalog if args.get("detail") == "full" else self.compact_catalog
+                    data = self.catalog if args.get("detail") == "full" else self.compact_text
             with phase("serialize"):
-                result = result_data(data)
+                result = result_text(data)
             result.meta = {"wealth-management-mcp/provenance": {
                 "completeness": "unknown", "data_freshness": "unknown",
                 "live_definition": "unverified",

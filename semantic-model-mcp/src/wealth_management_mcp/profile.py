@@ -768,3 +768,35 @@ def compact_schema(catalog: dict[str, Any]) -> dict[str, Any]:
         **described({"model": model["name"]}, model.get("description")),
         "tables": tables, "measures": measures, "relationships": relationships, "notes": catalog["warnings"],
     }
+
+
+def compact_schema_text(compact: dict[str, Any]) -> str:
+    """Plain-text rendering of compact_schema for agents; JSON keys and quoting cost about a third more tokens."""
+
+    def flat(text: str) -> str:
+        return text.strip().replace("\n", "\n    ")
+
+    lines = [f"Semantic model {compact['model']} ({compact['profile_id']} {compact['profile_version']}, compact view)"]
+    if compact.get("description"):
+        lines.append(flat(compact["description"]))
+    lines += ["", "TABLES (columns as name:type)"]
+    for table in compact["tables"]:
+        lines.append(f"{table['name']}: {flat(table['description'])}" if table.get("description") else table["name"])
+        lines.append("  " + ", ".join(
+            f"{column['name']}:{column['type']}" + (f" ({flat(column['description'])})" if column.get("description") else "")
+            for column in table["columns"]
+        ))
+    lines += ["", "MEASURES ([name] is the exact DAX reference; home table and format in parentheses, then definition and description)"]
+    for measure in compact["measures"]:
+        meta = measure["table"] + (f", format {measure['format']}" if measure.get("format") else "")
+        lines.append(f"{measure['name']} ({meta}) = {flat(measure['expression'])}")
+        if measure.get("description"):
+            lines.append(f"  {flat(measure['description'])}")
+    lines += ["", "RELATIONSHIPS (from -> to; active and single-direction unless marked; inactive ones need USERELATIONSHIP)"]
+    for relation in compact["relationships"]:
+        flags = [flag for flag, on in (("INACTIVE", not relation["active"]),
+                                       ("both directions", relation["cross_filter"] == "both")) if on]
+        line = f"{relation['from']} -> {relation['to']}" + (f" [{', '.join(flags)}]" if flags else "")
+        lines.append(line + (f": {flat(relation['description'])}" if relation.get("description") else ""))
+    lines += ["", "NOTES", *(f"- {flat(note)}" for note in compact["notes"])]
+    return "\n".join(lines) + "\n"
