@@ -201,6 +201,8 @@ The semantic model was updated: 54 measures and 37 relationships (25 active, 12 
 | 5. Period-axis YTD | **Resolved** by marking `dim_date` as the date table | Q34 |
 | 7. `[Weighted Pipeline]` includes Won and Lost | **Still true**, but the new `[Weighted Open Pipeline]` answers the open-only question directly | Q13 |
 
+**Newly populated columns.** Columns that were blank in the model (section 2, item 11) now have values for every row, verified live: advisor region, team, title, email, certification level and tenure, and client age band and tenure. The other item 11 columns were not rechecked.
+
 **New behavior: advisor slices go through the client.** `dim_advisor_primary` and `dim_advisor_secondary` now filter `dim_client` through `advisor_key_primary` and `advisor_key_secondary`. The event-owner `advisor_key` links on opportunities, interactions and recommendations are inactive. So an ordinary advisor slice now means "clients assigned to this advisor", and questions about the advisor recorded on the record need `USERELATIONSHIP` (and the client path turned off with `CROSSFILTER`). Affects Q29 and Q41.
 
 **Question changed for model v2 (dataset v3):**
