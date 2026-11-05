@@ -177,6 +177,11 @@ def test_numeric_audit_and_trap_flags():
     assert not numeric_audit(case(answer="We have 2,900 clients", row=row)).passed
     flagged = trap_flags(case(calls=[dax("EVALUATE ROW(\"x\", [Weighted Pipeline])")]))
     assert "unfiltered_weighted_pipeline" in flagged.details["flags"]
+    advisor_dax = "EVALUATE SUMMARIZECOLUMNS(dim_advisor_primary[advisor_name], \"p\", [Pipeline Value])"
+    assert "advisor_slice_via_client" in trap_flags(case(calls=[dax(advisor_dax)])).details["flags"]
+    owner_dax = advisor_dax.replace("[Pipeline Value]", "CALCULATE([Pipeline Value], USERELATIONSHIP(fact_opportunity[advisor_key], dim_advisor_primary[advisor_key]))")
+    assert trap_flags(case(calls=[dax(owner_dax)])).details["flags"] == {}
+    assert trap_flags(case(calls=[dax("EVALUATE SUMMARIZECOLUMNS(dim_account[account_type], \"a\", [Total AUM])")])).details["flags"] == {}
     assert trap_flags(case("sql")).status == "skipped"
 
 

@@ -284,12 +284,18 @@ def error_recovery(case: Case) -> Outcome:
 
 # ------------------------------------------------------------- known-trap flags
 
+# Patterns for the 2026-11-05 model (v2); v1 also had account-slice and YoY-measure traps.
 _TRAPS = {
     "sums_snapshots": re.compile(r"SUM\(\s*fact_aum_daily\[aum\]\s*\)(?![^)]*date_key)", re.IGNORECASE),
     "unfiltered_weighted_pipeline": re.compile(r"\[Weighted Pipeline\]", re.IGNORECASE),
-    "account_slice_without_userelationship": re.compile(r"dim_account\[(account_type|status)\]", re.IGNORECASE),
-    "uses_yoy_measure": re.compile(r"\[AUM YoY Growth %\]|\[AUM Previous Year\]", re.IGNORECASE),
+    "advisor_slice_via_client": re.compile(
+        r"dim_advisor_(primary|secondary)\[.*(fact_opportunity|fact_client_interaction|fact_recommendation"
+        r"|\[(Pipeline Value|Win Rate|Open Opportunities|Interaction Count|Total Recommendations)\])",
+        re.IGNORECASE | re.DOTALL,
+    ),
 }
+# The event-owner advisor links are inactive, so these only count as traps without USERELATIONSHIP.
+_UNLESS_USERELATIONSHIP = {"advisor_slice_via_client"}
 
 
 def trap_flags(case: Case) -> Outcome:
@@ -300,7 +306,7 @@ def trap_flags(case: Case) -> Outcome:
         text = call.query_text or ""
         for name, pattern in _TRAPS.items():
             if pattern.search(text):
-                if name == "account_slice_without_userelationship" and "USERELATIONSHIP" in text.upper():
+                if name in _UNLESS_USERELATIONSHIP and "USERELATIONSHIP" in text.upper():
                     continue
                 flagged[name] = flagged.get(name, 0) + 1
     return Outcome(1.0, ", ".join(flagged) or "no known trap pattern in the queries", details={"flags": flagged})
@@ -317,5 +323,5 @@ DETERMINISTIC = [
     Evaluator("schema_first", "custom_code", "agentic", schema_first),
     Evaluator("numbers_traceable", "custom_code", "agentic", numbers_traceable),
     Evaluator("error_recovery", "custom_code", "agentic", error_recovery),
-    Evaluator("trap_flags", "custom_code", "agentic", trap_flags),
+    Evaluator("trap_flags", "custom_code", "agentic", trap_flags, version="2"),
 ]

@@ -63,7 +63,9 @@ objects:
   datasets/dim_date:
     description: >-
       date_key and full_date with calendar, fiscal and period-end attributes.
-      full_date supplies time-intelligence dates and New Clients (Period) bounds.
+      Marked as the model date table on full_date, so time-intelligence measures
+      replace any other dim_date filter (year, quarter, month) with their own dates.
+      full_date also supplies New Clients (Period) bounds.
       Active links reach all nine fact tables; fact_transaction uses
       trade_date_key, and its settle_date_key link is inactive.
   datasets/dim_security:

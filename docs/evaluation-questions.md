@@ -18,6 +18,8 @@ Row counts match across both paths. Column-level differences are listed in secti
 
 Send agents the `question` field only.
 
+> **Model v2 (2026-11-05):** the semantic model was updated, which changes several behaviors in section 2. See [section 6](#6-model-v2-changes-2026-11-05). Reference answers are unchanged.
+
 ## 1. Data profile (live, 2026-10-08)
 
 | Table | Rows | Grain and cadence |
@@ -144,7 +146,7 @@ These behaviors were verified live. They are why a semantic-model agent cannot s
 | Q38 | As of the latest AUM snapshot, which client segment has the highest average AUM per account, counting only accounts that hold AUM on that date? | L | `[Avg AUM per Account]` | 1) Restrict to the latest snapshot. 2) By segment, divide AUM by distinct accounts in the snapshot. 3) Rank. | Per-entity average (AVERAGEX over accounts) rather than an average of rows. Dividing by every account on file, including closed ones, gives different values. |
 | Q39 | Who are our top 10 clients by AUM at the latest snapshot? Show each client's segment, number of accounts on file, and AUM. | L | `[Total Active AUM]` | 1) Sum latest-snapshot AUM by client; top 10. 2) Look up segment from dim_client. 3) Count accounts per client in dim_account (includes closed and restricted accounts). | Top-N, then enrichment from two dimensions (a second query or a nested lookup). |
 | Q40 | Compare High Net Worth and Ultra High Net Worth clients: AUM per client at the latest snapshot, interactions per client in 2025, and average 2025 sentiment. Divide by all clients in each segment, including those with no AUM balance. | XL | `[Total Active AUM]`, `[HNW Client Count]`, `[UHNW Client Count]`, `[Interaction Count]`, `[Avg Sentiment Score]` | 1) Count all clients per segment. 2) Sum latest-snapshot AUM per segment and divide by clients. 3) Count 2025 interactions per segment and divide by clients. 4) Average 2025 sentiment per segment. 5) Combine into one comparison. | Combining three facts at one segment grain. 370 clients have no AUM on the latest snapshot, so the denominator has to be stated. |
-| Q41 | Among advisors who are team leads, who are the top 3 by open pipeline value? Include each one's win rate and total number of client interactions. | M | `[Pipeline Value]`, `[Win Rate]`, `[Interaction Count]` | 1) Filter advisors to advisor_is_team_lead = 1 (10 advisors). 2) Rank by open pipeline value; top 3. 3) Add each advisor's win rate and interaction count. | Dimension filter propagated to two different facts via advisor_key. Advisor region, team, and title are blank in the semantic model, so the question uses the team-lead flag, which both data paths carry. |
+| Q41 | Among advisors who are team leads, who are the top 3 by open pipeline value (the advisor recorded on each opportunity)? Include each one's win rate and the number of client interactions recorded under that advisor. | M | `[Pipeline Value]`, `[Win Rate]`, `[Interaction Count]` | 1) Filter advisors to advisor_is_team_lead = 1 (10 advisors). 2) Rank by open pipeline value; top 3. 3) Add each advisor's win rate and interaction count. | Dimension filter propagated to two different facts via advisor_key. Advisor region, team, and title are blank in the semantic model, so the question uses the team-lead flag, which both data paths carry. |
 | Q42 | Which asset class had the largest increase, and which the largest decrease, in total holdings market value between the first (Jan 2024) and last (Dec 2025) monthly holdings snapshots? | L | `[Total Market Value]` | 1) Find the first (2024-01-31) and last (2025-12-31) snapshot dates. 2) Sum market value by asset class at each date. 3) Difference and rank. | Two snapshot evaluations combined into a change calculation. |
 | Q43 | What was the average Buy trade size (absolute amount) in 2025 for each client segment? | XL | `[Avg Trade Size]` | 1) Filter txn_type = 'Buy' and trade_date_key in 2025 (no date relationship). 2) Average ABS(amount) by client segment. | Large fact with a type filter, a direct date-key filter, and a dimension grouping. |
 | Q44 | Which opportunity type has the highest win rate and which has the lowest? | S | `[Win Rate]` | 1) Compute Won / (Won + Lost) per opportunity_type (15 types). 2) Pick max and min. | Measure evaluated per group, then ranked. |
@@ -186,3 +188,21 @@ These behaviors were verified live. They are why a semantic-model agent cannot s
 - **Q41:** Advisor region is blank in the semantic model, so the question was unanswerable through DAX. Replaced with the team-lead filter.
 - **Q46:** Now says "on record", to fix the time window.
 - **Q49:** Removed "external", because transfers may be internal. The six types are listed explicitly.
+
+## 6. Model v2 changes (2026-11-05)
+
+The semantic model was updated: 54 measures and 37 relationships (25 active, 12 inactive), with `dim_date` marked as the date table on `full_date`. The data is unchanged, so every reference answer still holds. Sections 2 and 4 describe the original model and are kept as the record behind runs up to full-3; this section lists what changed for the DAX and Fabric data agent arms.
+
+| Section 2 item | Status on model v2 | Questions |
+|---|---|---|
+| 2. `[AUM Previous Year]` blank, YoY 0, `[AUM YTD]` | **Resolved.** New `[AUM at Selected Period End]` takes the latest snapshot in the date context; `[AUM Previous Year]` and `[AUM YoY Growth %]` build on it. `[AUM YTD]` was removed | Q35, Q50 |
+| 3. No transaction-to-date relationship | **Resolved.** `fact_transaction[trade_date_key]` → `dim_date` is active; `settle_date_key` is inactive | Q25, Q26, Q43, Q49, Q50 |
+| 4. Inactive account-to-fact relationships | **Resolved.** All five are active; the matching fact → `dim_client` links are now inactive, and client filters reach those facts through `dim_account` | Q22, Q47, Q48, Q49 |
+| 5. Period-axis YTD | **Resolved** by marking `dim_date` as the date table | Q34 |
+| 7. `[Weighted Pipeline]` includes Won and Lost | **Still true**, but the new `[Weighted Open Pipeline]` answers the open-only question directly | Q13 |
+
+**New behavior: advisor slices go through the client.** `dim_advisor_primary` and `dim_advisor_secondary` now filter `dim_client` through `advisor_key_primary` and `advisor_key_secondary`. The event-owner `advisor_key` links on opportunities, interactions and recommendations are inactive. So an ordinary advisor slice now means "clients assigned to this advisor", and questions about the advisor recorded on the record need `USERELATIONSHIP` (and the client path turned off with `CROSSFILTER`). Affects Q29 and Q41.
+
+**Question changed for model v2 (dataset v3):**
+
+- **Q41:** Ranked by the advisor recorded on each opportunity, but the wording didn't say so; under the new default the client's assigned advisor gives a different ranking. Now names the advisor recorded on each opportunity and interaction, matching Q29. The reference answer is unchanged and was re-derived live with `USERELATIONSHIP`.
