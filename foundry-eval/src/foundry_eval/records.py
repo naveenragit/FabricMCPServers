@@ -60,7 +60,6 @@ class RunRecord(_Record):
 
     dataset_name: str | None = None
     dataset_sha256: str | None = None
-    dataset_split: str | None = None
     repeats: int | None = None
     concurrency: int | None = None
 

@@ -1,6 +1,6 @@
 """Run the evaluation dataset through the Foundry agents and record every attempt (plan section 7).
 
-Run: .\.venv\Scripts\python.exe scripts\run_eval.py [--arms dax sql fabric] [--split all] [--repeats 3] [--ids Q01,Q02]
+Run: .\.venv\Scripts\python.exe scripts\run_eval.py [--arms dax sql fabric] [--repeats 3] [--ids Q01,Q02]
     [--judge-workers 16] [--scoring judge|deterministic] [--no-evaluate] [--no-traces]
 Each arm gets its own run under artifacts/runs/ and its own worker pool, so a slow arm does not hold back a fast one; the
 arms run at the same time. Within an arm the questions that took longest in earlier runs start first. Each finished
@@ -200,7 +200,6 @@ def make_store(project: AIProjectClient, arm_key: str, args: argparse.Namespace,
         tools=[f"{arm.server_label}:{t}" for t in arm.allowed_tools],
         dataset_name=dataset.name,
         dataset_sha256=dataset_sha256(dataset),
-        dataset_split=args.split,
         repeats=args.repeats,
         concurrency=args.workers[arm_key],
         git_sha=git("rev-parse", "HEAD") or None,
@@ -250,7 +249,6 @@ def run_attempt(client, store: RunStore, row: Row, repeat: int) -> tuple[Attempt
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--arms", nargs="+", default=["dax", "sql", "fabric"], choices=sorted(ARMS))
-    parser.add_argument("--split", default="all", choices=["dev", "test", "all"])
     parser.add_argument("--ids", help="comma-separated row ids")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--repeats", type=int)
@@ -269,7 +267,7 @@ def main() -> int:
     if args.resume:
         resumed = {s.run.arm: s for s in (RunStore.open(RUNS, run_id) for run_id in args.resume)}
         first = next(iter(resumed.values())).run
-        args.arms, args.split, args.repeats, args.batch = list(resumed), first.dataset_split, first.repeats, first.batch_id
+        args.arms, args.repeats, args.batch = list(resumed), first.repeats, first.batch_id
         args.scoring = first.environment.get("scoring", "judge")
     args.repeats = args.repeats or int(os.environ.get("EVAL_REPEATS", "3"))
     dataset = ROOT / "evals" / "eval-dataset.jsonl"
@@ -277,8 +275,6 @@ def main() -> int:
     if args.ids:
         wanted = {i.strip().upper() for i in args.ids.split(",")}
         rows = [r for r in rows if r.id in wanted]
-    elif args.split != "all":
-        rows = [r for r in rows if r.split == args.split]
     if args.limit:
         rows = rows[: args.limit]
 

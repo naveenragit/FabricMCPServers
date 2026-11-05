@@ -33,7 +33,6 @@ def main() -> int:
             raise ValueError(f"{row.id}: missing scoring criteria or expected behavior")
     print(f"Validated {len(rows)} rows in {OUT.relative_to(ROOT)}  sha256={dataset_sha256(OUT)[:16]}")
     print("by set:", dict(Counter(r.set for r in rows)))
-    print("by split:", dict(Counter(r.split for r in rows)))
     print("zero-tolerance rows:", sum(r.gate == "zero" for r in rows))
     print("answerable:", sum(r.answerable for r in rows))
     print("rows with no arms (not runnable yet):", [r.id for r in rows if not r.applies_to])

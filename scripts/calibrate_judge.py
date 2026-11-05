@@ -2,7 +2,7 @@
 
 Baseline responses (55, from the earlier semantic-model run) should pass. Seeded wrong answers are made from the same
 responses and must fail: a figure just outside tolerance, a trap value presented as the answer, and a reversed ranking.
-Run: .\.venv\Scripts\python.exe scripts\calibrate_judge.py [--split dev|test|all] [--workers 6] [--limit N]
+Run: .\.venv\Scripts\python.exe scripts\calibrate_judge.py [--workers 6] [--limit N]
 """
 
 from __future__ import annotations
@@ -129,7 +129,6 @@ def seed_reversed_ranking(row: Row, text: str) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", default="all")
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--effort", default=None)
@@ -149,8 +148,6 @@ def main() -> int:
     for rid, text in baseline.items():
         row = rows.get(rid)
         if row is None or not [c for c in row.criteria if c.kind in ("fact", "trap", "behavior") and c.weight > 0]:
-            continue
-        if args.split != "all" and row.split != args.split:
             continue
         jobs.append((rid, "baseline", row, text, True))
         for tag, fn in (("outside_tolerance", seed_outside_tolerance), ("trap_as_answer", seed_trap_as_answer), ("reversed_ranking", seed_reversed_ranking)):
@@ -184,7 +181,7 @@ def main() -> int:
             vs = [v for k, v in audit_vals.items() if k.split(":")[0] == cid]
             crit_audit[cid] = all(vs) if vs else None
         out.append({
-            "id": rid, "variant": tag, "split": row.split, "should_pass": should_pass, "judge_score": judged.score, "judge_status": judged.status,
+            "id": rid, "variant": tag, "should_pass": should_pass, "judge_score": judged.score, "judge_status": judged.status,
             "judge_failed": [k for k, v in verdicts.items() if not v.get("met")],
             "audit_score": audit.score, "audit_failed": [c for c, ok in crit_audit.items() if ok is False],
             "numeric_criteria": sorted(numeric_ids), "verdicts": verdicts, "text": text if tag != "baseline" else None,

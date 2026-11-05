@@ -53,7 +53,6 @@ class Row(BaseModel):
     applies_to: list[Literal["dax", "sql", "fabric"]] = Field(default_factory=lambda: ["dax", "sql", "fabric"])
     gate: Literal["zero", "report"] = "report"
     checks: list[str] = Field(default_factory=list)
-    split: Literal["dev", "test"] = "test"
     answerable: bool = Field(True, description="The row has a data answer, so the data tool must be called")
 
 
@@ -133,8 +132,14 @@ def with_expected(row: Row) -> Row:
 
 
 def load_dataset(path: Path | str) -> list[Row]:
+    rows = []
     with Path(path).open(encoding="utf-8") as fh:
-        return [Row.model_validate_json(line) for line in fh if line.strip()]
+        for line in fh:
+            if line.strip():
+                raw = json.loads(line)
+                raw.pop("split", None)  # retired dev/test label, still present in dataset copies kept for old runs
+                rows.append(Row.model_validate(raw))
+    return rows
 
 
 def dataset_sha256(path: Path | str) -> str:

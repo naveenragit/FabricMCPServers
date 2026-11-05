@@ -200,18 +200,6 @@
       "default": null,
       "title": "Dataset Sha256"
     },
-    "dataset_split": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Dataset Split"
-    },
     "repeats": {
       "anyOf": [
         {

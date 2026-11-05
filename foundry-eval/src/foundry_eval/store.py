@@ -80,7 +80,9 @@ class RunStore:
     @classmethod
     def open(cls, root: Path | str, run_id: str) -> RunStore:
         directory = Path(root) / run_id
-        run = RunRecord.model_validate_json((directory / RUN_FILE).read_text(encoding="utf-8"))
+        raw = json.loads((directory / RUN_FILE).read_text(encoding="utf-8"))
+        raw.pop("dataset_split", None)  # retired field, still present in runs recorded before 2026-11-05
+        run = RunRecord.model_validate(raw)
         return cls(directory, run, None)
 
     def _write_run(self) -> None:

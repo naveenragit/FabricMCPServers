@@ -234,4 +234,3 @@ Q51–Q58 (dataset v4) target what the model's relationships provide. The SQL ar
 - **Reference answers:** every answer was derived twice, in DAX against the model and in SQL against the lakehouse, and both agree. Answers are in the private answer key.
 - **Traps recorded:** Q51 records the inflated AUM a direct AUM-to-transaction join produces; Q57 records the counts that include invalid settlement keys.
 - **Reporting:** the rows are tagged `relationship` with no tier, and the scorecard's category table reports them separately. They are designed to favor the semantic model, so read them apart from the tiered questions.
-- **Splits:** Q52 and Q55 are dev; the rest are test.

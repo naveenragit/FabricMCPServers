@@ -74,7 +74,6 @@ def compute(d: dict) -> dict:
     cj["correct"] = cj["score"] == 1.0
     cj["category"] = cj["question_id"].map(lambda q: meta[q]["category"])
     cj["tier"] = cj["question_id"].map(lambda q: meta[q].get("tier"))
-    cj["split"] = cj["question_id"].map(lambda q: meta[q].get("split"))
     cj = cj.drop(columns=[c for c in ("duration_s", "total_tokens", "status") if c in cj]).merge(
         att[["attempt_id", "duration_s", "total_tokens", "status"]], on="attempt_id", how="left")
     done = att[att["status"] == "completed"].merge(traces, on="attempt_id", how="left", suffixes=("", "_trace"))
@@ -102,14 +101,11 @@ def compute(d: dict) -> dict:
         aa = all_att[all_att["arm"] == arm]
         a = att[att["arm"] == arm]
         correct_done = dn["attempt_id"].isin(set(c.loc[c["correct"], "attempt_id"])).sum()
-        held = c[c["split"] == "test"]
         m["arms"][arm] = {
             "scored": len(c),
             "correct": int(c["correct"].sum()),
             "rate": c["correct"].mean(),
             "criteria_mean": c["score"].mean(),
-            "held_scored": len(held),
-            "held_rate": held["correct"].mean(),
             "rows": len(per_q),
             "every_repeat": (per_q["sum"] == per_q["count"]).mean(),
             "at_least_once": (per_q["sum"] > 0).mean(),
@@ -227,8 +223,6 @@ def compute(d: dict) -> dict:
     m["per_q"] = (pq, te)
     m["runs"] = d["t"]["runs"].set_index("arm")
     m["planned"] = len(meta) * 3 * 3
-    m["dev_rows"] = sorted({q for q in cj["question_id"].unique() if meta[q].get("split") == "dev"})
-    m["held_rows"] = sorted({q for q in cj["question_id"].unique() if meta[q].get("split") == "test"})
     m["te_messages"] = att[att["tool_error"]][["arm", "question_id", "tool_error_message"]].to_dict("records")
     m["total_attempts"] = len(all_att)
     m["infra_total"] = len(d["infra"])
@@ -715,9 +709,7 @@ def build(m: dict, run_ids: list[str]) -> str:
     # ---------------- Limits ----------------
     w("<h2>What these results do and do not show</h2><ul>")
     w("<li><b>One synthetic dataset.</b> The results describe this dataset and these 84 questions. They are a case study, not a general ranking of the three methods.</li>")
-    w(f"<li><b>The questions are not fully held out.</b> The agent instructions were revised after earlier runs on these same questions. "
-      f"On the {len(m['held_rows'])} scored questions outside the {len(m['dev_rows'])}-question development subset, the order is the same: "
-      f"SQL {pct(A['sql']['held_rate'])}, DAX {pct(A['dax']['held_rate'])}, Data Agent {pct(A['fabric']['held_rate'])}.</li>")
+    w("<li><b>The questions are not held out.</b> The agent instructions were revised after earlier runs on these same questions.</li>")
     w("<li><b>The Data Agent is a black box.</b> Its DAX and its model calls are not visible, so its token counts and query diagnostics are incomplete. "
       f"Its time includes a proxy on a developer machine and a tunnel, which add a median {tl['fabric']['hop']:.1f} s per call.</li>")
     w("<li><b>A model judges part of each score.</b> Code settles the numbers it can find; the judge model decides names, rankings and traps. "

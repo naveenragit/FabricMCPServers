@@ -108,7 +108,7 @@ Phase 0 is in progress for arm 3: the proxy is built, tested, and answers correc
    - Row-level security. The deployed model definition lists roles named Advisor and View All, although an earlier scan reported none, so recheck. A workspace Admin or Member is not filtered by roles, so the signed-in user sees every row, as the DAX server's identity does. You confirmed that the data agent sees all rows; G6 still verifies it.
    - The data agent tenant settings (Copilot and Azure OpenAI switch, Fabric Copilot capacity designation, cross-geo processing and storage where required) are enabled. They must already be, since the agent exists. Names change often, so verify them in the admin portal before relying on this list.
 5. Build and deploy the arm 3 proxy MCP server (new and small). Then add the three tools to Foundry and create the three agents with the controls in section 2. Follow [Reference: connecting the tools to Foundry](#reference-connecting-the-tools-to-foundry).
-6. Run gates G1–G7 and G9 below on a handful of rows (Q01, Q10, and one risk row), not the dev split. G8 needs the dataset and the custom evaluators, so it is the exit gate of Phase 2.
+6. Run gates G1–G7 and G9 below on a handful of rows (Q01, Q10, and one risk row), not the full set. G8 needs the dataset and the custom evaluators, so it is the exit gate of Phase 2.
 7. **Stop and report.** Phase 1 does not start until you review the gate results.
 
 | Gate | Pass condition | If it fails |
@@ -344,11 +344,11 @@ Register the custom evaluators (section 6), the policy text for policy-based eva
 
 ### Phase 3: pilot and runs
 
-Pilot on the dev split, freeze the setup, then run the full set (section 7). Phase 3 starts only after G1–G9 have passed, or the action in each failed gate's "If it fails" column has been taken and recorded. A failed G3 stops the plan until you choose a workaround (D14).
+Pilot on a few rows, freeze the setup, then run the full set (section 7). Phase 3 starts only after G1–G9 have passed, or the action in each failed gate's "If it fails" column has been taken and recorded. A failed G3 stops the plan until you choose a workaround (D14).
 
 ### Phase 4: analysis and iteration
 
-Produce the scorecards (section 8). Instruction changes are developed on the dev split only, and instructions stay identical across the three agents (D12); there is no agent-specific tuning. The frozen Phase 3 result is the headline. A re-run on the held-out split after a change is post-hoc, because that split has been seen, and is reported beside the headline, never in place of it.
+Produce the scorecards (section 8). Instructions stay identical across the three agents (D12); there is no agent-specific tuning. Every question runs on every arm, and all questions count toward the result; there is no held-out subset. Instruction changes are made after a full run and recorded, and the next full run is reported as a new result, never merged with the earlier one.
 
 ## 5. Dataset
 
@@ -369,10 +369,9 @@ Produce the scorecards (section 8). Instruction changes are developed on the dev
   | `must_not_call` | Regex list for forbidden tool arguments |
   | `applies_to` | Subset of `dax`, `sql`, `fabric` |
   | `gate` | `zero` or `report` |
-  | `split` | `dev` or `test` |
 
 - **Storage.** Datasets and answer keys stay in `evals/*.jsonl` and `artifacts/`, which are git-ignored. The risk prompts document is tracked because it holds prompts and expected behaviors only, with no reference values. Tracked documents avoid quoting reference answers for the same reason.
-- **Splits.** About 12 core and 6 risk rows form the dev split, stratified across tiers and categories with a recorded seed. Q01 and Q10 (gate G6) are always in it. The dev split drives the pilot, instruction tuning, and judge-prompt tuning. The rest is held out and never tuned against.
+- **One set.** Every row runs on every arm it applies to. There is no dev/test split (removed 2026-11-05).
 - **Named-list policy (D7).** Top-N is allowed up to 50 rows. Requests above 50 are capped at 50 with the cap stated. The Fabric data agent's 25-row platform cap is stricter and is reported as a platform limit.
 
 ## 6. Evaluation criteria
@@ -426,7 +425,7 @@ Phase 1 applies the same rule to every other row and records every change.
 | Capability | Measure | Arms |
 |---|---|---|
 | Tool selection | `builtin.tool_selection` | D S, F limited |
-| Tool call accuracy | `builtin.tool_call_accuracy` (1–5). Threshold calibrated on dev rows, proposed start 4 | D S, F limited |
+| Tool call accuracy | `builtin.tool_call_accuracy` (1–5). Threshold calibrated on a pilot sample, proposed start 4 | D S, F limited |
 | Tool input accuracy | `builtin.tool_input_accuracy`, strict, with the grounded `model_id` | D S, F limited |
 | Tool call success | `builtin.tool_call_success` | D S, F limited |
 | Use of tool results | `builtin.tool_output_utilization`, plus custom `numbers_traceable` (every figure in the answer appears in tool output or is derived from it) | D S, F limited |
@@ -506,13 +505,13 @@ The risk-set coverage and the policy are in [evaluation-risk-questions.md](evalu
 - Reasoning deployments reject an explicit temperature, so none is set. Judge stability is checked by scoring the same 20 responses twice and comparing.
 - Calibration uses the 55 existing responses in [semantic-model-responses.jsonl](../artifacts/evaluation/semantic-model-responses.jsonl). Score them with `criteria_judge`, compare with `numeric_audit` on the numeric criteria, and review disagreements manually. The `dax` lists on e03 and e05 in that file hold unrelated queries, so they are not used as traces.
 - Most baseline responses are expected to be correct, so agreement alone could be met by a judge that passes everything. Calibration therefore also scores seeded wrong answers made from the same responses: a trap value presented as the answer, a figure just outside tolerance, and a wrong name or order. A trap value that is only mentioned is a positive control and must pass. Report agreement, false-pass rate, and false-fail rate separately.
-- The judge prompt is tuned on dev rows only. Disagreements on held-out rows are reported, not tuned against.
+- The judge prompt is frozen before a full run and checked against the seeded wrong answers (G8).
 
 ## 7. Run design
 
 - **Rows:** 84 (55 core, 29 risk). **Arms:** 3. **Repeats:** 3.
 - **Attempts:** 84 × 3 × 3 = 756. R12 on every arm uses an agent variant pointed at a stub of that arm's tool contract.
-- **Pilot:** about 18 dev rows × 3 arms × 1 repeat = 54 attempts.
+- **Pilot:** a handful of rows × 3 arms × 1 repeat.
 - Fresh conversation per attempt. Arm order interleaved. Comparable concurrency.
 - Warm the SQL endpoint before each run. A cold endpoint can take longer than the driver's default login timeout.
 - Infrastructure errors (connection, timeout, rate limit) are logged separately from agent failures and re-run once. They are never silently dropped.
@@ -524,7 +523,7 @@ The harness package `foundry-eval/` writes each arm's run to `artifacts/runs/<ru
 
 | Table | One row per | Holds |
 |---|---|---|
-| `runs` | arm execution | Total wall time of the arm's agent code; agent, version, model deployment, reasoning effort, judge model, instruction hash, tools; dataset hash and split; git SHA; environment notes; counts of attempts, failures, infrastructure errors and attempts with a tool error. Token and time totals are computed from `attempts`, not stored |
+| `runs` | arm execution | Total wall time of the arm's agent code; agent, version, model deployment, reasoning effort, judge model, instruction hash, tools; dataset hash; git SHA; environment notes; counts of attempts, failures, infrastructure errors and attempts with a tool error. Token and time totals are computed from `attempts`, not stored |
 | `attempts` | question × repeat | Question and answer; status and infrastructure-error flag; whether a tool returned an error, which tool, and its error text; the attempt a re-run replaces; duration, time to first token; thinking, tool, tool-discovery and remaining time; model the platform reports; input, cached, output, reasoning and total tokens; tool, schema and query call counts |
 | `steps` | output item | Order, kind (reasoning, tool discovery, tool call, message); start and duration; server, tool, arguments, the DAX, SQL or question sent; output size, hash and preview; tool status and error |
 | `evaluations` | attempt × evaluator | Evaluator, kind and category; score, pass flag, label, threshold, reason, per-criterion details; judge model and judge tokens (kept apart from agent tokens); Foundry eval run and item ids; human-review flag |
@@ -540,14 +539,14 @@ Limits to keep in mind when analysing:
 
 ## 8. Reporting
 
-- **Scorecard per arm:** correct rate overall and by tier and category; mean criteria pass rate; correct in all repeats; item recall on list answers. Core rows (including E01–E05) and risk rows are reported separately, and the risk set has its own pass rate and gate table. The headline uses the held-out split; all-row numbers sit beside it with dev rows marked.
+- **Scorecard per arm:** correct rate overall and by tier and category; mean criteria pass rate; correct in all repeats; item recall on list answers. Core rows (including E01–E05) and risk rows are reported separately, and the risk set has its own pass rate and gate table. The headline uses every row.
 - **Language quality per arm:** mean fluency and coherence, and the share at or above the pass threshold, for responses of at least 20 tokens.
-- **Paired comparisons** on the same rows: arm 1 versus 2, 1 versus 3, 2 versus 3. Show the rows right in one arm and wrong in the other, with a bootstrap interval over rows. With about 43 held-out core rows, a gap of a few rows is within noise. Observed results only; no winner is assumed.
+- **Paired comparisons** on the same rows: arm 1 versus 2, 1 versus 3, 2 versus 3. Show the rows right in one arm and wrong in the other, with a bootstrap interval over rows. With about 50 core rows, a gap of a few rows is within noise. Observed results only; no winner is assumed.
 - **Risk gate table:** each zero-tolerance check per arm, with the trace that shows any failure.
 - **Agentic profile:** tool selection and accuracy, error recovery, schema discipline, and the trap-flag counts behind each failure.
 - **Efficiency:** agent-only tokens, tokens per correct answer, tool calls, retries, p50 and p95 latency. Arm 3 reports latency and Foundry-side tokens only.
 - **Failure taxonomy:** wrong measure or filter, wrong relationship, unrecovered tool error, over-refusal, under-refusal, fabrication, platform cap, infrastructure error.
-- **Reproducibility record:** dataset, evaluator, agent, judge, and model versions, and the split seed.
+- **Reproducibility record:** dataset, evaluator, agent, judge, and model versions.
 
 ## 9. Risks and limitations
 
