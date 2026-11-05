@@ -42,7 +42,7 @@ def case(arm="dax", answer="ok", calls=(), row=None, **attempt_fields):
         attempt_id="a", run_id="r", arm=arm, question_id="q", question="?", answer_text=answer, status="completed",
         started_at=now, ended_at=now, duration_s=1.0, timing_basis="total_only", **attempt_fields,
     )
-    row = row or Row(id="q", set="core", category="t", query="?")
+    row = row or Row(id="q", type="core", category="t", query="?")
     return Case(row=row, attempt=attempt, steps=steps, config=CONFIG)
 
 
@@ -137,11 +137,11 @@ def test_named_row_cap_does_not_count_aggregate_tables():
 
 
 def test_data_tool_called_fails_a_figure_given_without_any_call():
-    row = Row(id="q", set="core", category="t", query="?", answerable=True)
+    row = Row(id="q", type="core", category="t", query="?", answerable=True)
     assert data_tool_called(case(answer="3,000 clients", calls=[dax("EVALUATE ROW(1)")], row=row)).passed
     assert not data_tool_called(case(answer="3,000 clients", row=row)).passed
     assert data_tool_called(case("fabric", calls=[("ask_fabric_data_agent", "{}", "q", "x")], row=row)).passed
-    skip = Row(id="e", set="core", category="edge", query="?", answerable=False)
+    skip = Row(id="e", type="core", category="edge", query="?", answerable=False)
     assert data_tool_called(case(row=skip)).status == "skipped"
 
 
@@ -172,7 +172,7 @@ def test_error_recovery_records_the_platform_abort_as_not_recoverable():
 
 
 def test_numeric_audit_and_trap_flags():
-    row = with_expected(Row(id="q", set="core", category="t", query="?", criteria=[Criterion(id="c", instruction="must state 3,000 clients.")]))
+    row = with_expected(Row(id="q", type="core", category="t", query="?", criteria=[Criterion(id="c", instruction="must state 3,000 clients.")]))
     assert numeric_audit(case(answer="We have 3,000 clients", row=row)).passed
     assert not numeric_audit(case(answer="We have 2,900 clients", row=row)).passed
     flagged = trap_flags(case(calls=[dax("EVALUATE ROW(\"x\", [Weighted Pipeline])")]))
@@ -198,7 +198,7 @@ class FakeJudge:
 
 def _criteria_row(*extra):
     fact = Criterion(id="clients", instruction="must state 3,000 clients.")
-    return with_expected(Row(id="q", set="core", category="t", query="?", criteria=[fact, *extra]))
+    return with_expected(Row(id="q", type="core", category="t", query="?", criteria=[fact, *extra]))
 
 
 def test_criteria_judge_settles_found_figures_without_the_judge():
@@ -261,7 +261,7 @@ def test_deterministic_mode_uses_no_judge_and_reviews_behavior():
     evaluators = evaluators_for("deterministic")
     assert not [e for e in evaluators if e.kind == "custom_prompt"]
     review = next(e for e in evaluators if e.name == "behavior_review")
-    row = Row(id="r", set="risk", category="t", query="?", expected_behavior="refuse", gate="zero")
+    row = Row(id="r", type="risk", category="t", query="?", expected_behavior="refuse", gate="zero")
     out = review.run(case(row=row))
     assert out.passed is None and out.label == "needs_review"
     assert review.run(case()).status == "skipped"

@@ -4,7 +4,7 @@
 
 [eval-dataset.jsonl](eval-dataset.jsonl) is the authoritative dataset for all three arms: DAX semantic model, SQL lakehouse, and Fabric data agent. Edit prompts, reference answers, criteria, and expected behavior here, not in an arm-specific copy or the historical Markdown tables.
 
-Dataset revision: **v5, 2026-11-05**. It contains **102 rows**:
+Dataset revision: **v6, 2026-11-05**. It contains **102 rows**:
 
 - Q01-Q50: 50 factual questions (Q41 reworded in v3 for model v2).
 - Q51-Q58: eight `relationship` questions added in v4.
@@ -12,7 +12,7 @@ Dataset revision: **v5, 2026-11-05**. It contains **102 rows**:
 - R01-R29: 29 revised risk prompts/rubrics.
 - R30-R39: ten additional single-turn risk and positive-control cases.
 
-v5 removed the dev/test `split` field; the content is otherwise identical to v4.
+v5 removed the dev/test `split` field. v6 gives each row a question `type`: `core` (Q01-Q58, the business use case) or `risk` (R01-R39 and E01-E05: attacks, refusals and edge behavior). It also removed fields that never changed a result: `tier` (now read from `category`), `applies_to` (every row runs on every arm), `checks` (every evaluator runs on every row), and the criterion `weight` (support criteria never count; all others count equally).
 
 All rows retain the existing `foundry_eval.dataset.Row` schema and apply to `dax`, `sql`, and `fabric`. Every row runs on every arm; there is no dev/test split (removed 2026-11-05). Reference answers remain local in ignored JSONL files.
 

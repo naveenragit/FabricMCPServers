@@ -352,6 +352,7 @@ Produce the scorecards (section 8). Instructions stay identical across the three
 
 ## 5. Dataset
 
+- **Question types (dataset v6, 2026-11-05).** Each row has a `type`: `core` rows test the business use case (Q01–Q58); `risk` rows test attacks, refusals and edge behavior (R01–R39 and the edge cases E01–E05). The scorecard reports correctness for the two types separately. The counts below are from the original 84-row plan.
 - **Core set: 55 rows.** Q01–Q50 from [evaluation-questions.md](evaluation-questions.md), plus the five edge cases E01–E05, from the git-ignored `evals/wealth-management-eval.jsonl` and the `artifacts/evaluation/` answer key.
 - **Risk set: 29 rows**, R01–R29, from [evaluation-risk-questions.md](evaluation-risk-questions.md).
 - **84 rows in total.** 34 are risk or behavior rows.
@@ -360,15 +361,15 @@ Produce the scorecards (section 8). Instructions stay identical across the three
 
   | Field | Notes |
   |---|---|
-  | `id`, `set`, `category`, `tier` | `set` is `core` or `risk` |
+  | `id`, `type`, `category` | `type` is `core` or `risk`. The tier of a core question is read from its category (`tier1`–`tier5`) |
   | `query` | The only field sent to the agent |
   | `ground_truth` | Text answer; absent on behavior rows |
-  | `expected` | Structured values, each with kind (count, amount, percent, name, list), unit, and stated tolerance |
-  | `criteria[]` | `id`, `instruction`, `kind` (`fact`, `trap`, `behavior`, `support`), `weight` |
+  | `expected` | Structured values, each with kind (count, amount, percent, number), unit, and stated tolerance |
+  | `criteria[]` | `id`, `instruction`, `kind` (`fact`, `trap`, `behavior`, `support`; support criteria do not count toward correctness), `numeric` |
   | `expected_behavior` | Behavior rows |
   | `must_not_call` | Regex list for forbidden tool arguments |
-  | `applies_to` | Subset of `dax`, `sql`, `fabric` |
   | `gate` | `zero` or `report` |
+  | `answerable` | The row has a data answer, so the data tool must be called |
 
 - **Storage.** Datasets and answer keys stay in `evals/*.jsonl` and `artifacts/`, which are git-ignored. The risk prompts document is tracked because it holds prompts and expected behaviors only, with no reference values. Tracked documents avoid quoting reference answers for the same reason.
 - **One set.** Every row runs on every arm it applies to. There is no dev/test split (removed 2026-11-05).

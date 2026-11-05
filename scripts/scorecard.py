@@ -93,18 +93,22 @@ def main() -> int:
     section(f"Correctness ({accuracy}: {how}; correct = all criteria met)")
     cj = ok[ok["evaluator"] == accuracy].copy()
     cj = cj.merge(attempts[["attempt_id", "tool_error"]], on="attempt_id")
+    cj["type"] = cj["question_id"].map(lambda q: rows_by_id[q].type if q in rows_by_id else None)
     rows = []
-    for arm, g in cj.groupby("arm"):
+    for (qtype, arm), g in cj.groupby(["type", "arm"]):
         correct = g["passed"] == True  # noqa: E712
         review = g["passed"].isna()
         rows.append(
             {
-                "arm": arm, "scored": len(g), "correct": int(correct.sum()), "needs_review": int(review.sum()),
+                "type": qtype, "arm": arm, "scored": len(g), "correct": int(correct.sum()), "needs_review": int(review.sum()),
                 "correct_rate_of_scored": pct(correct.mean()), "correct_rate_of_decided": pct(correct.sum() / max(int((~review).sum()), 1)),
                 "mean_criteria_pass": pct(g["score"].mean()),
             }
         )
-    out.append(pd.DataFrame(rows).set_index("arm").to_string() if rows else "no scored rows")
+    out.append(
+        "core = business questions; risk = attacks, refusals and edge behavior that also have a factual answer to check\n"
+        + (pd.DataFrame(rows).set_index(["type", "arm"]).to_string() if rows else "no scored rows")
+    )
     audit = ok[ok["evaluator"] == "numeric_audit"]
     if len(audit):
         a = audit.groupby("arm")["score"].apply(lambda s: (s == 1.0).mean())
@@ -204,22 +208,9 @@ def main() -> int:
         for _, r in gdf[gdf["status"] != "pass"].sort_values(["status", "arm", "question_id"]).iterrows():
             out.append(f"  {r['status'].upper()} {r['arm']} {r['question_id']} (gate={r['gate']}): {r['why']}")
 
-    section("Evaluators that produced results (name@version: ok/skipped/error) and dataset checks without a result")
+    section("Evaluators that produced results (name@version: ok/skipped/error)")
     ran = evals.assign(v=evals["evaluator"] + "@" + evals["evaluator_version"].fillna("?").astype(str))
     out.append(ran.groupby(["v", "status"]).size().unstack(fill_value=0).to_string())
-    alias = {"criteria_judge": set(ACCURACY), "behavior_judge": set(BEHAVIOR)}
-    have = evals[evals["status"] != "error"].groupby("attempt_id")["evaluator"].agg(set)
-    gaps: dict[tuple[str, str], int] = {}
-    for _, a in attempts.iterrows():
-        row = rows_by_id.get(a["question_id"])
-        present = have.get(a["attempt_id"], set())
-        for check in row.checks if row else []:
-            if not alias.get(check, {check}) & present:
-                gaps[(a["arm"], check)] = gaps.get((a["arm"], check), 0) + 1
-    out.append(
-        "every check listed in the dataset has a result" if not gaps
-        else "\n".join(f"  MISSING {arm} {check}: {n} attempts" for (arm, check), n in sorted(gaps.items()))
-    )
 
     section("Agentic process (custom)")
     rows = []

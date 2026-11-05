@@ -282,16 +282,14 @@ def main() -> int:
         preflight_proxy()
     if "sql" in args.arms:
         preflight_sql()
-    with_stub = any(r.id in STUB_ROWS and set(r.applies_to) & set(args.arms) for r in rows)
+    with_stub = any(r.id in STUB_ROWS for r in rows)
     if with_stub:
         preflight_stub()
     project = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential())
     client = project.get_openai_client()
     stores = resumed or {arm: make_store(project, arm, args, dataset, with_stub) for arm in args.arms}
 
-    work = {
-        arm: [(row, repeat) for row in rows for repeat in range(args.repeats) if arm in row.applies_to] for arm in args.arms
-    }
+    work = {arm: [(row, repeat) for row in rows for repeat in range(args.repeats)] for arm in args.arms}
     for arm, store in resumed.items():
         have = {(a.question_id, a.repeat_index) for a in store.attempts() if not a.infra_error}
         work[arm] = [(row, repeat) for row, repeat in work[arm] if (row.id, repeat) not in have]

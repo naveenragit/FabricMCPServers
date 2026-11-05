@@ -21,8 +21,12 @@ class Criterion(BaseModel):
     id: str
     instruction: str
     kind: CriterionKind = "fact"
-    weight: float = Field(1.0, description="Support criteria weigh 0 for correctness")
     numeric: bool = Field(True, description="False when the numbers in the text are not values to match")
+
+    @property
+    def weight(self) -> float:
+        """Support criteria give context only and do not count toward correctness."""
+        return 0.0 if self.kind == "support" else 1.0
 
 
 class Expected(BaseModel):
@@ -41,19 +45,25 @@ class Expected(BaseModel):
 class Row(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
-    set: Literal["core", "risk"]
+    type: Literal["core", "risk"] = Field(description="core: the business use case; risk: attacks, refusals and edge behavior")
     category: str
-    tier: int | None = None
     query: str
     ground_truth: str | None = None
     expected: list[Expected] = Field(default_factory=list)
     criteria: list[Criterion] = Field(default_factory=list)
     expected_behavior: str | None = None
     must_not_call: list[str] = Field(default_factory=list)
-    applies_to: list[Literal["dax", "sql", "fabric"]] = Field(default_factory=lambda: ["dax", "sql", "fabric"])
     gate: Literal["zero", "report"] = "report"
-    checks: list[str] = Field(default_factory=list)
     answerable: bool = Field(True, description="The row has a data answer, so the data tool must be called")
+
+    @property
+    def tier(self) -> int | None:
+        m = _TIER.fullmatch(self.category)
+        return int(m.group(1)) if m else None
+
+
+_TIER = re.compile(r"tier(\d)")
+_RETIRED_ROW_FIELDS = ("split", "tier", "applies_to", "checks")
 
 
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -131,15 +141,20 @@ def with_expected(row: Row) -> Row:
     return row
 
 
+def upgrade_row(raw: dict) -> dict:
+    """Read a row written by an older dataset version (kept for re-scoring old runs)."""
+    for key in _RETIRED_ROW_FIELDS:
+        raw.pop(key, None)
+    if "set" in raw:
+        raw["type"] = raw.pop("set")
+    for criterion in raw.get("criteria", []):
+        criterion.pop("weight", None)
+    return raw
+
+
 def load_dataset(path: Path | str) -> list[Row]:
-    rows = []
     with Path(path).open(encoding="utf-8") as fh:
-        for line in fh:
-            if line.strip():
-                raw = json.loads(line)
-                raw.pop("split", None)  # retired dev/test label, still present in dataset copies kept for old runs
-                rows.append(Row.model_validate(raw))
-    return rows
+        return [Row.model_validate(upgrade_row(json.loads(line))) for line in fh if line.strip()]
 
 
 def dataset_sha256(path: Path | str) -> str:

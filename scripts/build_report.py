@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import html
-import json
 import re
 import sys
 from pathlib import Path
@@ -17,6 +16,7 @@ import pandas as pd
 from scorecard import foundry_tool_spans
 
 from foundry_eval.analysis import load_tables
+from foundry_eval.dataset import load_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 ARMS = ["dax", "sql", "fabric"]
@@ -60,10 +60,7 @@ def load(run_ids: list[str]) -> dict:
     att = attempts_all[~attempts_all["attempt_id"].isin(infra)].copy()
     ev = t["evaluations"]
     ev = ev[(~ev["attempt_id"].isin(infra)) & (ev["status"] == "ok")].drop_duplicates(["attempt_id", "evaluator"], keep="last")
-    meta = {}
-    for line in (ROOT / "evals" / "eval-dataset.jsonl").read_text(encoding="utf-8").splitlines():
-        row = json.loads(line)
-        meta[row["id"]] = row
+    meta = {row.id: row for row in load_dataset(ROOT / "evals" / "eval-dataset.jsonl")}
     return {"t": t, "traces": traces, "attempts_all": attempts_all, "infra": infra, "att": att, "ev": ev, "meta": meta}
 
 
@@ -72,8 +69,8 @@ def compute(d: dict) -> dict:
     m: dict = {"arms": {}}
     cj = ev[ev["evaluator"] == "criteria_judge"].copy()
     cj["correct"] = cj["score"] == 1.0
-    cj["category"] = cj["question_id"].map(lambda q: meta[q]["category"])
-    cj["tier"] = cj["question_id"].map(lambda q: meta[q].get("tier"))
+    cj["category"] = cj["question_id"].map(lambda q: meta[q].category)
+    cj["tier"] = cj["question_id"].map(lambda q: meta[q].tier)
     cj = cj.drop(columns=[c for c in ("duration_s", "total_tokens", "status") if c in cj]).merge(
         att[["attempt_id", "duration_s", "total_tokens", "status"]], on="attempt_id", how="left")
     done = att[att["status"] == "completed"].merge(traces, on="attempt_id", how="left", suffixes=("", "_trace"))
@@ -87,7 +84,7 @@ def compute(d: dict) -> dict:
     done["query_s"] = done["spans"].map(lambda s: span_sum(s, lambda x: x.get("kind") == "tool" and "schema" not in x["name"]))
     traced = done[done["agent_span_s"].notna()]
     beh = ev[ev["evaluator"] == "behavior_judge"].copy()
-    beh["category"] = beh["question_id"].map(lambda q: meta[q]["category"])
+    beh["category"] = beh["question_id"].map(lambda q: meta[q].category)
     all_att = d["attempts_all"]
     tt = d["t"]["tool_timings"].drop_duplicates(["attempt_id", "step_index"], keep="last")
     tt = tt[tt["attempt_id"].isin(set(att["attempt_id"]))]
@@ -187,11 +184,11 @@ def compute(d: dict) -> dict:
     m["edge_rate"] = {a: e_all[e_all["arm"] == a]["correct"].mean() for a in ARMS}
 
     # Risk categories: expected behaviour (behavior judge) and, where a row also has factual criteria, correctness.
-    risk_rows = [q for q, r in meta.items() if q.startswith("R")]
-    cats = sorted({meta[q]["category"] for q in risk_rows})
+    risk_rows = [q for q, r in meta.items() if r.type == "risk" and r.category != "edge"]  # edge rows have their own section
+    cats = sorted({meta[q].category for q in risk_rows})
     risk = []
     for cat in cats:
-        rows = [q for q in risk_rows if meta[q]["category"] == cat]
+        rows = [q for q in risk_rows if meta[q].category == cat]
         g = beh[beh["category"] == cat]
         risk.append({"category": cat, "rows": rows, **{a: (int((g[g["arm"] == a]["passed"] == True).sum()), len(g[g["arm"] == a])) for a in ARMS}})  # noqa: E712
     m["risk"] = risk

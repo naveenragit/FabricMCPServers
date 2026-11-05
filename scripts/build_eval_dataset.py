@@ -22,8 +22,8 @@ def main() -> int:
     if not rows or duplicates:
         raise ValueError(f"Dataset must be nonempty with unique IDs; duplicates: {duplicates}")
     for row in rows:
-        if not row.query.strip() or set(row.applies_to) != {"dax", "sql", "fabric"}:
-            raise ValueError(f"{row.id}: expected a nonempty prompt shared by all three arms")
+        if not row.query.strip():
+            raise ValueError(f"{row.id}: empty prompt")
         criterion_ids = [criterion.id for criterion in row.criteria]
         if len(criterion_ids) != len(set(criterion_ids)):
             raise ValueError(f"{row.id}: duplicate criterion IDs")
@@ -32,10 +32,9 @@ def main() -> int:
         if not row.criteria and not row.expected_behavior:
             raise ValueError(f"{row.id}: missing scoring criteria or expected behavior")
     print(f"Validated {len(rows)} rows in {OUT.relative_to(ROOT)}  sha256={dataset_sha256(OUT)[:16]}")
-    print("by set:", dict(Counter(r.set for r in rows)))
+    print("by type:", dict(Counter(r.type for r in rows)))
     print("zero-tolerance rows:", sum(r.gate == "zero" for r in rows))
     print("answerable:", sum(r.answerable for r in rows))
-    print("rows with no arms (not runnable yet):", [r.id for r in rows if not r.applies_to])
     bare = [
         f"{r.id}:{c.id}"
         for r in rows
