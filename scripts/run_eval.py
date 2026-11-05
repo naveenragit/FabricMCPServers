@@ -1,6 +1,6 @@
 """Run the evaluation dataset through the Foundry agents and record every attempt (plan section 7).
 
-Run: .\.venv\Scripts\python.exe scripts\run_eval.py --arms dax fabric --split dev --repeats 1 [--workers dax=4,fabric=8]
+Run: .\.venv\Scripts\python.exe scripts\run_eval.py [--arms dax sql fabric] [--split all] [--repeats 3] [--ids Q01,Q02]
     [--judge-workers 16] [--scoring judge|deterministic] [--no-evaluate] [--no-traces]
 Each arm gets its own run under artifacts/runs/ and its own worker pool, so a slow arm does not hold back a fast one; the
 arms run at the same time. Within an arm the questions that took longest in earlier runs start first. Each finished
@@ -249,8 +249,8 @@ def run_attempt(client, store: RunStore, row: Row, repeat: int) -> tuple[Attempt
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arms", nargs="+", default=["dax", "fabric"], choices=sorted(ARMS))
-    parser.add_argument("--split", default="dev", choices=["dev", "test", "all"])
+    parser.add_argument("--arms", nargs="+", default=["dax", "sql", "fabric"], choices=sorted(ARMS))
+    parser.add_argument("--split", default="all", choices=["dev", "test", "all"])
     parser.add_argument("--ids", help="comma-separated row ids")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--repeats", type=int)
