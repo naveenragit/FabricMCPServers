@@ -5,8 +5,8 @@ Python **3.11** implementation of the [project plan](../docs/implementation-plan
 ## Implemented and verified
 
 - Deterministic **OSSIE-derived Fabric/DAX Profile 1.0.0** generation, bundled upstream schema with verified provenance, decoded extension schemas and semantic validation.
-- Actual PBIX catalog: **15 datasets, 171 fields, 53 first-class DAX metrics, 33 relationships (28 active / 5 inactive)**. DAX definitions, types, native bindings and inactive state are preserved.
-- [Formula-derived draft descriptions](semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml) for all tables/measures. Business-owner verification is still needed; guidance never changes DAX.
+- Actual PBIX catalog (model update 2026-11-05): **15 datasets, 171 fields, 54 first-class DAX metrics, 37 relationships (25 active / 12 inactive)**. DAX definitions, types, native bindings and inactive state are preserved.
+- Measure descriptions come from the model itself; the [overlay](semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml) adds draft model/table descriptions and measure synonyms. Business-owner verification is still needed; guidance never changes DAX.
 - MCP resource preview over **stdio and loopback Streamable HTTP**, with no client authentication.
 - Remote backend discovery and a reviewed-contract registration mechanism for Microsoft's four documented roles. Exact names/inputs are never guessed.
 - Fixed backend credential provider, model/report allowlists, report-binding checks, positive native success/error policies, bounded HTTP/result handling, explicit disclosure/definition approval gates, and safe diagnostics.

@@ -25,7 +25,7 @@ Development workspace for a read-only MCP façade over a Power BI semantic model
 
 ## Current status
 
-The Python package is implemented under **[semantic-model-mcp](semantic-model-mcp/README.md)**. Offline generation/validation and MCP stdio/HTTP resources work; pytest, Ruff, and mypy pass, and the wheel's bundled schema resources were verified outside the source folder. The actual catalog preserves **15 tables, 171 columns, 53 measures, 33 relationships**.
+The Python package is implemented under **[semantic-model-mcp](semantic-model-mcp/README.md)**. Offline generation/validation and MCP stdio/HTTP resources work; pytest, Ruff, and mypy pass, and the wheel's bundled schema resources were verified outside the source folder. The actual catalog preserves **15 tables, 171 columns, 54 measures, 37 relationships** (model update 2026-11-05).
 
 The project-owned `fabric_rest` backend is deployed and has executed live DAX through the Arrow-returning `executeDaxQueries` endpoint. Microsoft's native preview MCP endpoint remains blocked by its disabled tenant setting, so the `remote_mcp` mode still exposes zero invented Microsoft tools. Version **0.2.0** adds a disabled-by-default, allowlisted operator probe for testing the `effectiveUsername` Read versus Build requirement; it does not add per-caller identity propagation.
 
