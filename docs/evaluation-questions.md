@@ -1,4 +1,4 @@
-# Evaluation question set: 50 wealth-management prompts
+# Evaluation question set: 58 wealth-management prompts
 
 **Created:** 2026-10-08. **Status:** reference answers computed live through the deployed MCP servers, then adversarially validated (section 5). All 50 of 50 questions were independently re-derived and agree with the answer key: 55 of 55 checks passed, run in the other engine or by a different method. 50 questions have agreeing SQL and DAX answers.
 
@@ -19,6 +19,8 @@ Row counts match across both paths. Column-level differences are listed in secti
 Send agents the `question` field only.
 
 > **Model v2 (2026-11-05):** the semantic model was updated, which changes several behaviors in section 2. See [section 6](#6-model-v2-changes-2026-11-05). Reference answers are unchanged.
+
+> **Relationship questions (2026-11-05, dataset v4):** Q51–Q58 were added in category `relationship` (no tier). They exercise what the model's relationships make easy and naive SQL joins get wrong. See [Relationship questions](#relationship--model-relationships-8) and [section 7](#7-relationship-questions-2026-11-05).
 
 ## 1. Data profile (live, 2026-10-08)
 
@@ -162,6 +164,21 @@ These behaviors were verified live. They are why a semantic-model agent cannot s
 | Q49 | For 2025 (by trade date), what was the net money movement by account type from contributions, wires in and transfers in, minus distributions, wires out and transfers out? Which account type had the largest and smallest net inflow? | XL | `[Total Transaction Volume]` | 1) Filter the six named txn_types and 2025 trade dates. 2) Join to dim_account (inactive relationship). 3) Sum signed amount by account_type; rank. | Explicit business definition over six transaction types, an inactive relationship, a date filter with no relationship, and signed amounts. Excluding transfers changes the ranking. |
 | Q50 | Give me a 2025 executive summary: current AUM, year-over-year AUM growth versus year-end 2024, 2025 AUM net flows, number of transactions traded in 2025, open pipeline value, overall win rate, and number of unresolved Critical alerts. | XL | `[Total Active AUM]`, `[Net Flows]`, `[Transaction Count]`, `[Pipeline Value]`, `[Win Rate]`, `[Critical Alerts]`, `[Open Alerts]` | 1) Latest-snapshot AUM and YoY versus 2024-12-27 (not the broken YoY measure). 2) 2025 net flows. 3) 2025 transaction count by trade_date_key. 4) Open pipeline value and win rate. 5) Unresolved Critical alerts. 6) Assemble into one summary. | Many independent queries combined. Combines the snapshot, YoY, no-date-relationship, and filter-on-measure gotchas. |
 
+### Relationship — model relationships (8)
+
+Category `relationship`, no tier, so tier results stay comparable with earlier runs. Written for model v2: every path below uses active relationships except the settlement date.
+
+| ID | Prompt | Vol. | Semantic-model measures | Plan | What it tests |
+|---|---|---|---|---|---|
+| Q51 | For each client segment, show AUM at the latest snapshot, the number of trades in 2025 (by trade date), the number of client interactions in 2025, and the value of all open opportunities (not Won or Lost). | XL | `[AUM at Selected Period End]`, `[Transaction Count]`, `[Interaction Count]`, `[Pipeline Value]` | 1) Latest-snapshot AUM by segment. 2) 2025 trades by segment. 3) 2025 interactions by segment. 4) Open pipeline by segment. 5) Combine the four aggregates. | Four facts side by side through one shared dimension. Joining the facts to each other multiplies rows and inflates every total. |
+| Q52 | As of the latest AUM snapshot, what is total AUM by the region of each client's primary advisor, and how many clients and accounts (every account on file) are in each region? | L | `[AUM at Selected Period End]`, `[Total Clients]` | 1) Map clients to their primary advisor's region. 2) Sum latest-snapshot AUM through client and account. 3) Count clients and all accounts by region. | Three-step filter path: primary advisor → client → account → AUM fact. |
+| Q53 | For each primary advisor team, show the number of clients assigned to it (by each client's primary advisor), those clients' AUM at the latest snapshot, and their number of unresolved Critical alerts. Which team has the most unresolved Critical alerts? | XL | `[Total Clients]`, `[AUM at Selected Period End]`, `[Critical Alerts]`, `[Open Alerts]` | 1) Map clients to teams. 2) Count clients. 3) Sum latest-snapshot AUM (through accounts). 4) Count unresolved Critical alerts (through clients). 5) Rank. | Two facts reached by different paths from one dimension; joining alerts and AUM per client multiplies rows. |
+| Q54 | At the latest holdings snapshot, what total market value do clients with an Aggressive risk profile (not Moderately Aggressive) hold, and which three asset classes hold the most of it, with their values? | L | `[Total Market Value]` | 1) Restrict to the latest monthly snapshot. 2) Filter Aggressive clients through dim_account. 3) Sum by asset class; total and top 3. | One fact filtered by two dimensions on different paths, plus snapshot selection. |
+| Q55 | Quarter by quarter in 2025, how many trades (by trade date), client interactions, opportunities and alerts were recorded? | XL | `[Transaction Count]`, `[Interaction Count]`, `[Total Alerts]` | 1) Count each fact's 2025 rows by quarter of its own date key. 2) Align by quarter. | One shared date dimension across four facts with different date columns. |
+| Q56 | Among clients who have a secondary advisor, how many have a secondary advisor in a different region from their primary advisor, and what is those clients' combined AUM at the latest snapshot? | L | `[AUM at Selected Period End]` | 1) Keep clients with a secondary advisor. 2) Compare the two advisors' regions. 3) Count and sum latest-snapshot AUM. | Two role-playing advisor dimensions on different client keys in one comparison; many clients have no secondary advisor. |
+| Q57 | In December 2025, how many transactions settled (by settlement date) compared with how many traded (by trade date), and what was the total Buy amount of the transactions that settled in December 2025? | L | `[Transaction Count]`, `[Buy Volume]` | 1) Count December 2025 settlements (in DAX, `USERELATIONSHIP` on settle_date_key). 2) Count December 2025 trades. 3) Sum settled Buy amounts. | The inactive settlement-date relationship. Invalid settlement keys such as 20251232 are not December dates; matching on the key prefix counts them anyway. |
+| Q58 | How many clients hold AUM at the latest snapshot but had no client interaction recorded in 2025, and what is their combined AUM? | L | `[AUM at Selected Period End]`, `[Interaction Count]` | 1) Clients with positive latest-snapshot AUM. 2) Remove clients with any 2025 interaction. 3) Count and sum AUM. | Anti-join across two facts through the client dimension. |
+
 ## 5. Adversarial validation (2026-10-08)
 
 | Check | Method | Result |
@@ -208,3 +225,13 @@ The semantic model was updated: 54 measures and 37 relationships (25 active, 12 
 **Question changed for model v2 (dataset v3):**
 
 - **Q41:** Ranked by the advisor recorded on each opportunity, but the wording didn't say so; under the new default the client's assigned advisor gives a different ranking. Now names the advisor recorded on each opportunity and interaction, matching Q29. The reference answer is unchanged and was re-derived live with `USERELATIONSHIP`.
+
+## 7. Relationship questions (2026-11-05)
+
+Q51–Q58 (dataset v4) target what the model's relationships provide. The SQL arm's schema has no foreign keys, but every key is named consistently, so finding a join is not the hard part. These questions instead combine several facts through shared dimensions, follow multi-step paths, use both advisor roles, share one date table across facts, or need the inactive settlement-date link.
+
+- **Checks before writing them (live, model v2):** each fact's `client_key` matches its account's `client_key` on every row, so routing through `dim_account` or using the fact's own key gives the same answer. Many clients have no secondary advisor. Every invalid settlement key is a day number past the end of its month (for example 20251232), so none is a real December date.
+- **Reference answers:** every answer was derived twice, in DAX against the model and in SQL against the lakehouse, and both agree. Answers are in the private answer key.
+- **Traps recorded:** Q51 records the inflated AUM a direct AUM-to-transaction join produces; Q57 records the counts that include invalid settlement keys.
+- **Reporting:** the rows are tagged `relationship` with no tier, and the scorecard's category table reports them separately. They are designed to favor the semantic model, so read them apart from the tiered questions.
+- **Splits:** Q52 and Q55 are dev; the rest are test.
