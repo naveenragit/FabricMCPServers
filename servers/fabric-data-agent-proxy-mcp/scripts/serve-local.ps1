@@ -1,7 +1,7 @@
 <#
 Run the arm 3 proxy locally as the signed-in Azure CLI user, over HTTP on port 8000.
 Reads ..\..\..\.env (tenant, workspace, data agent, and the host of FABRIC_PROXY_MCP_URL for the Host-header allowlist).
-Usage: .\servers/fabric-data-agent-proxy-mcp\scripts\serve-local.ps1 [-TunnelHost <host>]
+Usage: .\servers\fabric-data-agent-proxy-mcp\scripts\serve-local.ps1 [-TunnelHost <host>]
 #>
 param([string]$TunnelHost)
 

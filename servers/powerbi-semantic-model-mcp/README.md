@@ -268,7 +268,7 @@ Run the following from the **parent project root** in PowerShell. Reuse its exis
 ```powershell
 .\.venv\Scripts\python.exe -c "import sys; assert sys.prefix != sys.base_prefix and sys.version_info[:2] == (3,11)"
 $env:UV_PROJECT_ENVIRONMENT = (Join-Path $PWD '.venv')
-uv sync --project semantic-model-mcp --python .venv/Scripts/python.exe --locked --group dev --group inspection --inexact --system-certs
+uv sync --project servers/powerbi-semantic-model-mcp --python .venv/Scripts/python.exe --locked --group dev --group inspection --inexact --system-certs
 ```
 
 The lock currently references the available Microsoft package mirror. **SDK 2.1.1** is pinned: the mirror did not contain the planned 2.2.0, and direct public wheel downloads failed TLS negotiation. No certificate verification was disabled. A move to another index/version requires a deliberate re-lock and test run. The `inspection` group is optional and unnecessary for a runtime-only installation. `--inexact` preserves unrelated existing parent-environment inspection packages.
@@ -328,7 +328,7 @@ Defaults: 60-second overall request deadline, 1,000 total rows at reviewed respo
 .\.venv\Scripts\python.exe -m ruff check servers/powerbi-semantic-model-mcp/src servers/powerbi-semantic-model-mcp/tests
 .\.venv\Scripts\python.exe -m mypy --config-file servers/powerbi-semantic-model-mcp/pyproject.toml --follow-imports silent servers/powerbi-semantic-model-mcp/src
 .\.venv\Scripts\python.exe -m pytest servers/powerbi-semantic-model-mcp/tests -q
-uv build --project semantic-model-mcp --python .venv/Scripts/python.exe --wheel --out-dir servers/powerbi-semantic-model-mcp/dist --system-certs
+uv build --project servers/powerbi-semantic-model-mcp --python .venv/Scripts/python.exe --wheel --out-dir servers/powerbi-semantic-model-mcp/dist --system-certs
 ```
 
 Vendored OSSIE retains its Apache license/notice. This project-specific derivative is **not unmodified OSSIE, Apache-endorsed DAX support, a complete Fabric round-trip exporter, or verified Microsoft wire compatibility**.
