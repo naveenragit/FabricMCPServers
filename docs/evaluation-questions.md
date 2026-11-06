@@ -9,7 +9,7 @@ This set feeds the [Foundry agent evaluation plan](foundry-agent-evaluation-plan
 
 Row counts match across both paths. Column-level differences are listed in section 2, item 11; only the performance-return rounding affects any question (Q30, Q47), and the tolerance absorbs it.
 
-**Answer key:** [artifacts/evaluation/eval-questions.jsonl](../artifacts/evaluation/eval-questions.jsonl) and [answer-key.md](../artifacts/evaluation/answer-key.md). The `artifacts/` folder is gitignored, consistent with the plan's rule that answer keys stay out of the public repository. Each JSONL row contains:
+**Answer key:** [eval-questions.jsonl](../artifacts/evaluation-support/reference-answers/eval-questions.jsonl) and [answer-key.md](../artifacts/evaluation-support/reference-answers/answer-key.md). The `artifacts/` folder is gitignored, consistent with the plan's rule that answer keys stay out of the public repository. Each JSONL row contains:
 
 - the question, tier, and plan
 - the expected answer, as text and as structured values, with its tolerance

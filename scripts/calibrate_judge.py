@@ -136,7 +136,7 @@ def main() -> int:
     load_env()
     rows = {r.id: r for r in load_dataset(ROOT / "evals" / "eval-dataset.jsonl")}
     baseline = {}
-    for line in (ROOT / "artifacts" / "evaluation" / "semantic-model-responses.jsonl").read_text(encoding="utf-8").splitlines():
+    for line in (ROOT / "artifacts" / "evaluation-support" / "judge-calibration" / "semantic-model-responses.jsonl").read_text(encoding="utf-8").splitlines():
         item = json.loads(line)
         baseline[item["name"].split("_")[0].upper()] = item["response"]
 
@@ -189,7 +189,7 @@ def main() -> int:
             "numeric_settled": sorted(settled),
             "hybrid_failed": [k for k, v in verdicts.items() if not v.get("met") and k not in settled],
         })
-    dest = ROOT / "artifacts" / "evaluation" / "judge-calibration.json"
+    dest = ROOT / "artifacts" / "evaluation-support" / "judge-calibration" / "judge-calibration.json"
     dest.write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
 
     scored = [o for o in out if o["judge_status"] == "ok"]
