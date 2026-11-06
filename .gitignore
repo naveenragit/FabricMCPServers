@@ -7,6 +7,9 @@
 artifacts/
 # Optimizer datasets carry ground-truth answers.
 evals/*.jsonl
+# Evaluation datasets carry ground-truth answers; only the README is tracked.
+evaluation/datasets/*
+!evaluation/datasets/README.md
 .tools/
 .venv/
 __pycache__/
