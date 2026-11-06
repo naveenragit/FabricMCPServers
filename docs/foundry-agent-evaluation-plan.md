@@ -90,7 +90,7 @@ Housekeeping, all part of Phase 0:
 - `.env` stays untracked. `.env.example` is tracked and lists the variable names with empty values.
 - The [.gitignore](../.gitignore) ignores `.env` and `.env.*` and already follows them with `!.env.example`, so the template can be tracked. Confirm with `git check-ignore -v .env.example` when creating it.
 - The harness reuses the repo-root `.venv` (Python 3.11) and adds a pinned `requirements.txt` under a new `foundry-eval/` folder, proposed as the harness location. `azure-ai-projects>=2.2.0` is the current minimum for the project Evals client. No global installs.
-- The proxy is a new package, proposed as `fabric-dataagent-mcp/`, built on the same pattern as `onelake-tables-mcp` and deployed to the existing App Service plan.
+- The proxy is a new package, proposed as `servers/fabric-data-agent-proxy-mcp/`, built on the same pattern as `onelake-tables-mcp` and deployed to the existing App Service plan.
 
 ## 4. Phases
 
@@ -194,7 +194,7 @@ Foundry's own Fabric connections to a data agent act as a signed-in user, which 
 *Option 3a, a thin proxy MCP server (used; A2, confirmed):*
 
 1. The endpoint is `https://<fabric-api-host>/v1/mcp/workspaces/<workspace-id>/dataagents/<data-agent-id>/agent`, built from `FABRIC_WORKSPACE_ID` and `FABRIC_DATA_AGENT_ID`. Phase 0 lists its tools and records their names and input schema.
-2. The proxy is the package `fabric-dataagent-mcp/`, which mirrors `onelake-tables-mcp`: an HTTP server with path `/mcp`, no inbound authentication (the accepted POC scope), synthetic data only. Because it signs in as the developer through the Azure CLI (D15), it runs on the developer's machine, and Foundry must reach it through a public tunnel. Start it with `fabric-dataagent-mcp/scripts/serve-local.ps1`, then `devtunnel host wm-fabric-proxy.use` from the repo venv, and stop both when arm 3 is not running. Hosting it on App Service would need a stored user credential, which is a separate decision.
+2. The proxy is the package `servers/fabric-data-agent-proxy-mcp/`, which mirrors `onelake-tables-mcp`: an HTTP server with path `/mcp`, no inbound authentication (the accepted POC scope), synthetic data only. Because it signs in as the developer through the Azure CLI (D15), it runs on the developer's machine, and Foundry must reach it through a public tunnel. Start it with `servers/fabric-data-agent-proxy-mcp/scripts/serve-local.ps1`, then `devtunnel host wm-fabric-proxy.use` from the repo venv, and stop both when arm 3 is not running. Hosting it on App Service would need a stored user credential, which is a separate decision.
 3. It exposes one tool that takes a natural-language question and forwards it to the endpoint as the signed-in user. It returns the answer unchanged, with no rewriting, retrying, truncation, or added instructions, so that arm 3 stays the data agent's own behavior. It logs latency and upstream errors.
 4. The tool definition follows the schema rules above: one string parameter and no `anyOf`. Policy v1 lives in the Foundry agent's instructions (D12), not in the proxy.
 5. No secret is stored: the proxy uses the developer's Azure CLI token. The tunnel exposes the proxy, and so the developer's access to the data agent, to anyone who has its URL. That is the same accepted POC exposure as arms 1 and 2, but it uses a person's identity, so keep the tunnel up only while arm 3 runs.

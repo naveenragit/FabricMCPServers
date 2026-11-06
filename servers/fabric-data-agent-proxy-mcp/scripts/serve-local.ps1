@@ -1,11 +1,11 @@
 <#
 Run the arm 3 proxy locally as the signed-in Azure CLI user, over HTTP on port 8000.
-Reads ..\..\.env (tenant, workspace, data agent, and the host of FABRIC_PROXY_MCP_URL for the Host-header allowlist).
-Usage: .\fabric-dataagent-mcp\scripts\serve-local.ps1 [-TunnelHost <host>]
+Reads ..\..\..\.env (tenant, workspace, data agent, and the host of FABRIC_PROXY_MCP_URL for the Host-header allowlist).
+Usage: .\servers/fabric-data-agent-proxy-mcp\scripts\serve-local.ps1 [-TunnelHost <host>]
 #>
 param([string]$TunnelHost)
 
-$root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+$root = Resolve-Path (Join-Path $PSScriptRoot '..\..\..')
 $values = @{}
 foreach ($line in Get-Content (Join-Path $root '.env')) {
     if ($line -match '^\s*([A-Z0-9_]+)=(.*)$') { $values[$Matches[1]] = $Matches[2].Trim() }

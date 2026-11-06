@@ -6,7 +6,7 @@ Each arm gets its own run under artifacts/runs/ and its own worker pool, so a sl
 arms run at the same time. Within an arm the questions that took longest in earlier runs start first. Each finished
 attempt is scored right away (deterministic checks, the judge only where needed), and Foundry traces are joined at the
 end. Re-running scripts/evaluate_runs.py later fills any gaps.
-Arm 3 needs the proxy and the dev tunnel up (fabric-dataagent-mcp/scripts/serve-local.ps1, then devtunnel host).
+Arm 3 needs the proxy and the dev tunnel up (servers/fabric-data-agent-proxy-mcp/scripts/serve-local.ps1, then devtunnel host).
 """
 
 from __future__ import annotations
