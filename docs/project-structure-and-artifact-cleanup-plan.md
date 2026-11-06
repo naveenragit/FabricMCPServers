@@ -275,14 +275,24 @@ What Phase A did:
 - Gate: all 144 protected files match their Phase 0 hashes, and the regenerated `full-4` scorecard, metrics, and report and the `full-3` scorecard and metrics match the baseline.
 - Left for Phase B, because these files move or are renamed there: default output paths and help text naming old artifact folders in `run_eval.py` (closing hint), `scorecard.py` (help), `build_report.py` (help and report footer), `check_model_rls.py` (scan output), and `foundry_smoke_agents.py` (docstring). None of them is an input, so nothing breaks. Changing the report footer changes report output, so the gate baseline is then refreshed for that one line.
 
-Phase B: code-touching moves, one small step at a time
+Phase B: code-touching moves, one small step at a time - done 2026-11-06, except the live end-to-end check
 
-- [ ] Apply the new ignore rules before moving the dataset.
-- [ ] Move one server project at a time with `git mv`. Fix its paths, reinstall it editable, check the import location, run its tests, and start it offline. Commit after each server.
-- [ ] Move the evaluation harness and datasets. Check the import location, run the harness tests and the dataset validator (hash unchanged). Commit.
-- [ ] Move and rename scripts by group. Fix root depth and script-to-script imports, check each script's computed repository root, and run the touched commands offline. Commit after each group.
-- [ ] Refresh READMEs and documentation links. Commit.
-- [ ] Final gate: run the section 13 checks, then one end-to-end question per arm, with your go-ahead. Present the final folder map and commands.
+- [x] Apply the new ignore rules before moving the dataset.
+- [x] Move one server project at a time with `git mv`. Fix its paths, reinstall it editable, check the import location, run its tests, and start it offline. Commit after each server.
+- [x] Move the evaluation harness and datasets. Check the import location, run the harness tests and the dataset validator (hash unchanged). Commit.
+- [x] Move and rename scripts by group. Fix root depth and script-to-script imports, check each script's computed repository root, and run the touched commands offline. Commit after each group.
+- [x] Refresh READMEs and documentation links. Commit.
+- [ ] Final gate: run the section 13 checks, then one end-to-end question per arm, with your go-ahead. Present the final folder map and commands. The offline checks pass; the live end-to-end question per arm is still waiting for your go-ahead.
+
+What Phase B did:
+
+- Ignore rules: everything under `evaluation/datasets/` is ignored except its README, checked with `git check-ignore` before the dataset moved. The old `evals/*.jsonl` rule stays as a safeguard.
+- Servers: `servers/powerbi-semantic-model-mcp/`, `servers/onelake-sql-mcp/`, and `servers/fabric-data-agent-proxy-mcp/`, one commit each. Each was reinstalled editable with `uv pip install --no-deps --offline -e`, which worked for all four packages, so the `.pth` fallback was not needed. Each passed its tests and Ruff, and each deployment package builds locally with the same layout. The semantic model server reports its offline status. The proxy started from its new folder through `serve-local.ps1` and answered on port 8000. Fixed: the semantic model packager's repository root, `serve-local.ps1`'s root, and the project's `.vscode/mcp.json` and `.env.example`.
+- Evaluation: the harness is in `evaluation/harness/`, and the dataset is `evaluation/datasets/wealth-management-benchmark.jsonl` with its hash unchanged. Seven scripts now default to the new dataset path. The untracked `build_dataset.py` moved with its package, unchanged.
+- Scripts: 20 scripts moved into six groups. The repository root moved from `parents[1]` to `parents[2]`, and the two sibling imports now use the new module names. Output paths now point to `artifacts/diagnostics/` (RLS scan, raw smoke events) and `artifacts/benchmarks/` (help text, closing hint, report footer). `--help` was run on all 10 argparse scripts after checking that each parses before doing any work. Ruff found one regression, a missing `Path` import, which was fixed; the 4 other findings predate Phase B.
+- Report footer: only the footer text changed in the `full-4` report, so that baseline file was refreshed, and the old copy is kept as `baseline/full-4-report.before-footer-change.html`.
+- Docs: the seven design and evaluation documents are in `docs/architecture/`, `docs/evaluation/`, and `docs/archive/`. Every relative link was recomputed and none is broken. The root README is now a project map with common commands, and it holds no run results.
+- Final offline check (`final_check.py` in the baseline folder): all four test suites, Ruff, mypy, the dataset hash, script roots and `--help`, the gate (144 protected files plus the regenerated `full-4` and `full-3` outputs), Markdown links, offline server status, editable-install paths, no stale folder paths, nothing private tracked, and no workflow. All pass.
 
 ## 13. Verification and Acceptance Criteria
 
