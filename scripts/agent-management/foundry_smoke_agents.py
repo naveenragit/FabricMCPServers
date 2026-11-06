@@ -1,7 +1,7 @@
 """Stream one question through each named agent and record it as a run (G2 smoke).
 
-Run: .\.venv\Scripts\python.exe scripts\foundry_smoke_agents.py wm-dax-agent [wm-sql-agent ...] [--q "question"]
-Records go to artifacts/runs/<run_id>/; raw events to artifacts/foundry-smoke/<agent>.jsonl (both gitignored).
+Run: .\.venv\Scripts\python.exe scripts\agent-management\foundry_smoke_agents.py wm-dax-agent [wm-sql-agent ...] [--q "question"]
+Records go to artifacts/runs/<run_id>/; raw events to artifacts/diagnostics/foundry-smoke/<agent>.jsonl (both gitignored).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from foundry_eval import RunStore
 from foundry_eval.agents import ARMS
 from openai import APIError
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_env() -> None:
@@ -39,7 +39,7 @@ def main() -> int:
     load_env()
     project = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential())
     client = project.get_openai_client()
-    raw_dir = ROOT / "artifacts" / "foundry-smoke"
+    raw_dir = ROOT / "artifacts" / "diagnostics" / "foundry-smoke"
     raw_dir.mkdir(parents=True, exist_ok=True)
     arm_by_agent = {arm.agent_name: arm for arm in ARMS.values()}
 

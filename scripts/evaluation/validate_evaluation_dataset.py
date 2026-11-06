@@ -1,6 +1,6 @@
 """Validate the canonical evaluation/datasets/wealth-management-benchmark.jsonl without regenerating it from legacy sources.
 
-Run: .\.venv\Scripts\python.exe scripts\build_eval_dataset.py
+Run: .\.venv\Scripts\python.exe scripts\evaluation\validate_evaluation_dataset.py
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from foundry_eval.dataset import dataset_sha256, load_dataset
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"
 
 

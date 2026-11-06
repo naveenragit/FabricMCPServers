@@ -9,7 +9,7 @@ Development workspace for a read-only MCP façade over a Power BI semantic model
 > [servers/powerbi-semantic-model-mcp/docs/azure-deployment.md](servers/powerbi-semantic-model-mcp/docs/azure-deployment.md).
 >
 > The source `.pbix` is deliberately **not** published; it stays git-ignored. Regenerate the
-> catalog from your own model with `scripts/inspect_pbix.py` and the `export` command.
+> catalog from your own model with `scripts/model-inspection/inspect_pbix.py` and the `export` command.
 
 ## Deliverables
 
@@ -19,8 +19,8 @@ Development workspace for a read-only MCP façade over a Power BI semantic model
 - **[docs/evaluation-risk-questions.md](docs/evaluation-risk-questions.md)** — 29 added risk and behavior prompts and the agent policy they test.
 - **[docs/model-assessment.md](docs/model-assessment.md)** — findings from the actual PBIX, including relationship, RLS, measure, report, and AI-metadata observations.
 - **[docs/adversarial-review.md](docs/adversarial-review.md)** — source-backed review findings, corrections, evidence checks, and unresolved implementation gates.
-- [scripts/inspect_pbix.py](scripts/inspect_pbix.py) — reproducible offline metadata-only inspection utility.
-- [scripts/probe_effective_username_mcp.py](scripts/probe_effective_username_mcp.py) — constant-result MCP probe for the `effectiveUsername` Read versus Build permission matrix.
+- [scripts/model-inspection/inspect_pbix.py](scripts/model-inspection/inspect_pbix.py) — reproducible offline metadata-only inspection utility.
+- [scripts/diagnostics/probe_effective_username_mcp.py](scripts/diagnostics/probe_effective_username_mcp.py) — constant-result MCP probe for the `effectiveUsername` Read versus Build permission matrix.
 - [requirements-inspection.txt](requirements-inspection.txt) — pinned inspection dependency; not proposed server runtime dependencies.
 
 ## Current status

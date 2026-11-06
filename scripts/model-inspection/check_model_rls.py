@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
 
 import httpx2
 from azure.identity import AzureCliCredential
@@ -60,9 +61,11 @@ def main() -> None:
                 if dataset.get(key):
                     print(f"  {key}: {dataset[key]}")
 
-    with open("artifacts/scan-result.json", "w", encoding="utf-8") as handle:
+    out = Path("artifacts/diagnostics/rls-scan-result.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2)
-    print("\nfull scan written to artifacts/scan-result.json")
+    print(f"\nfull scan written to {out.as_posix()}")
 
 
 main()

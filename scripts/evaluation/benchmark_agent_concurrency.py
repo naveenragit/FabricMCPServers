@@ -6,7 +6,7 @@ N x --rounds questions have been asked, so the load is sustained, not a single b
 any throttling clear. A call counts as a success when it completes with an answer and no tool or infrastructure error;
 the numeric check (no LLM) also reports whether the expected figures are in the answer.
 
-Run: .\.venv\Scripts\python.exe scripts\concurrency_test.py --arms dax sql fabric [--levels 1-10] [--rounds 3]
+Run: .\.venv\Scripts\python.exe scripts\evaluation\benchmark_agent_concurrency.py --arms dax sql fabric [--levels 1-10] [--rounds 3]
     [--ids Q01,Q07,Q12,Q19,Q31] [--cooldown 30] [--keep-going]
 Arm 3 needs the proxy and the dev tunnel up. Results: artifacts/concurrency/<batch>/<arm>.jsonl and summary.md.
 """
@@ -27,7 +27,7 @@ from azure.ai.projects import AIProjectClient
 from azure.identity import AzureCliCredential
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import run_eval  # noqa: E402  (preflights, env loading, DNS retry)
+import run_agent_benchmark as run_eval  # noqa: E402  (preflights, env loading, DNS retry)
 
 from foundry_eval.agents import ARMS  # noqa: E402
 from foundry_eval.dataset import load_dataset  # noqa: E402
@@ -36,7 +36,7 @@ from foundry_eval.evaluators.base import Case  # noqa: E402
 from foundry_eval.evaluators.deterministic import numeric_audit  # noqa: E402
 from foundry_eval.recorder import AttemptRecorder  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "artifacts" / "concurrency"
 
 

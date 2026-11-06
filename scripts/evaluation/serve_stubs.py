@@ -1,6 +1,6 @@
 """Serve the R12 injection stub on port 8001: copies tool definitions from the real servers, then serves the stub.
 
-Run: .\.venv\Scripts\python.exe scripts\serve_stubs.py
+Run: .\.venv\Scripts\python.exe scripts\evaluation\serve_stubs.py
 Reads INJECTION_STUB_URL from .env (its host goes into the Host-header allowlist). Needs no backend and holds no data.
 """
 
@@ -19,7 +19,7 @@ from foundry_eval.net import install_dns_retry
 from foundry_eval.stub_server import build_app, fetch_tools
 
 install_dns_retry()
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_env() -> None:

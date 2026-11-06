@@ -1,6 +1,6 @@
 """Create the project connections and agent versions for the MCP-backed arms.
 
-Run: .\.venv\Scripts\python.exe scripts\foundry_create_agents.py [--arms dax sql] [--stub]
+Run: .\.venv\Scripts\python.exe scripts\agent-management\foundry_create_agents.py [--arms dax sql] [--stub]
 Connections are created through ARM (the SDK has no create). Names are written back to .env.
 --stub creates the R12 test agents instead: same instructions and tools, pointed at INJECTION_STUB_URL.
 """
@@ -22,7 +22,7 @@ from azure.identity import AzureCliCredential
 
 from foundry_eval.agents import ARMS, build_instructions
 
-ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 DEFAULT_CONNECTION = {"dax": "wm-semantic-mcp", "sql": "wm-onelake-mcp", "fabric": "wm-fabric-proxy-mcp"}
 ARM_API = "2025-04-01-preview"
 

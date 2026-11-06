@@ -2,7 +2,7 @@
 
 Baseline responses (55, from the earlier semantic-model run) should pass. Seeded wrong answers are made from the same
 responses and must fail: a figure just outside tolerance, a trap value presented as the answer, and a reversed ranking.
-Run: .\.venv\Scripts\python.exe scripts\calibrate_judge.py [--workers 6] [--limit N]
+Run: .\.venv\Scripts\python.exe scripts\evaluation\calibrate_judge.py [--workers 6] [--limit N]
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from foundry_eval.records import AttemptRecord
 
 install_dns_retry()
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_env() -> None:

@@ -558,7 +558,7 @@ wealth-management-mcp/
 │   ├── integration/test_power_bi_backend.py
 │   ├── integration/test_poc_http_access.py
 │   └── fixtures/sanitized/
-├── scripts/inspect_pbix.py
+├── scripts/model-inspection/inspect_pbix.py
 ├── docs/
 │   ├── implementation-plan.md
 │   ├── model-assessment.md

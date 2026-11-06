@@ -1,6 +1,6 @@
 """Evaluate stored runs: local evaluators (deterministic + judges) and, on request, the Foundry cloud built-ins.
 
-Run: .\.venv\Scripts\python.exe scripts\evaluate_runs.py <run_id> [<run_id> ...] [--scoring judge|deterministic] [--cloud]
+Run: .\.venv\Scripts\python.exe scripts\evaluation\score_recorded_runs.py <run_id> [<run_id> ...] [--scoring judge|deterministic] [--cloud]
     [--no-local] [--workers 6] [--cloud-batch 5] [--cloud-workers 5] [--dataset <jsonl>]
 The LLM judge runs only where the deterministic checks cannot decide (D23); --scoring deterministic uses no judge and
 marks undecided criteria and behaviors needs_review. The cloud built-ins are LLM-judged and
@@ -30,7 +30,7 @@ from foundry_eval.net import install_dns_retry
 
 install_dns_retry()
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CLOUD = {k: v for k, v in BUILTINS.items() if k != "response_completeness"}
 
 

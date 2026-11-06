@@ -8,7 +8,7 @@ from pathlib import Path
 from azure.ai.projects import AIProjectClient
 from azure.identity import AzureCliCredential
 
-for line in (Path(__file__).resolve().parents[1] / ".env").read_text(encoding="utf-8").splitlines():
+for line in (Path(__file__).resolve().parents[2] / ".env").read_text(encoding="utf-8").splitlines():
     if "=" in line and not line.startswith("#"):
         k, _, v = line.partition("=")
         os.environ.setdefault(k.strip(), v.strip())

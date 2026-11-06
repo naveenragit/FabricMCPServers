@@ -149,7 +149,7 @@ The experiment needs:
   $env:WEALTH_MCP_SEMANTIC_MODEL_ID = '<semantic-model-id>'
   $env:WEALTH_MCP_READ_ONLY_TEST_USER = 'read-only-user@contoso.com'
   $env:WEALTH_MCP_BUILD_TEST_USER = 'build-user@contoso.com'
-  .\.venv\Scripts\python.exe scripts\probe_effective_username_mcp.py
+  .\.venv\Scripts\python.exe scripts\diagnostics\probe_effective_username_mcp.py
   ```
 
 The probe sends only `EVALUATE ROW("Probe", 1)` and expects this matrix:
@@ -229,7 +229,7 @@ setting silently excludes it and looks exactly like the setting being off.
 
 **4. Hard blocks no setting overrides.** Service principals cannot use these endpoints against
 a model with **RLS** or with **SSO** enabled. Neither applies here — confirmed as `0` RLS roles
-and `PbixInImportMode` via [scripts/check_model_rls.py](../../scripts/check_model_rls.py), which
+and `PbixInImportMode` via [scripts/model-inspection/check_model_rls.py](../../scripts/model-inspection/check_model_rls.py), which
 uses the admin scanner because `INFO.ROLES()` is blocked through Execute Queries.
 
 ### Reading the failure modes

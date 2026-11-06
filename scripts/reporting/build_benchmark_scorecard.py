@@ -1,6 +1,7 @@
 """Per-arm scorecard from stored runs: correctness, process, risk gates, efficiency, tool errors.
 
-Run: .\.venv\Scripts\python.exe scripts\scorecard.py <run_id> [<run_id> ...] [--out artifacts/scorecards/<name>.md] [--dataset <jsonl>]
+Run: .\.venv\Scripts\python.exe scripts\reporting\build_benchmark_scorecard.py <run_id> [<run_id> ...]
+    [--out artifacts/benchmarks/<folder>/scorecard/<batch>.md] [--export artifacts/benchmarks/<folder>/metrics] [--dataset <jsonl>]
 Needs the analysis extra (pandas). Reads the plan's tables only; no reference value is printed. --dataset must be the file
 the runs were made with (row gates and checks come from it); a hash mismatch stops the scorecard.
 """
@@ -18,7 +19,7 @@ from foundry_eval.analysis import load_tables, wide_attempts
 from foundry_eval.dataset import dataset_sha256, load_dataset
 from foundry_eval.evaluators import ACCURACY, BEHAVIOR, ZERO_TOLERANCE, gate_status
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 ZERO = sorted(ZERO_TOLERANCE)
 PROCESS = ["data_tool_called", "schema_first", "numbers_traceable"]
 BUILTIN = ["task_completion", "intent_resolution", "tool_call_accuracy", "tool_input_accuracy", "tool_selection",
@@ -41,7 +42,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_ids", nargs="+")
     parser.add_argument("--out")
-    parser.add_argument("--export", help="directory for CSVs of every metric, e.g. artifacts/metrics/<name>")
+    parser.add_argument("--export", help="directory for CSVs of every metric, e.g. artifacts/benchmarks/<folder>/metrics")
     parser.add_argument("--dataset", default=str(ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"))
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)

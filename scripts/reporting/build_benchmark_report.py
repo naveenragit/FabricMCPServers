@@ -1,6 +1,7 @@
 """Build the HTML results report for a three-arm run. Every figure is computed here from the stored run records.
 
-Run: .\.venv\Scripts\python.exe scripts\build_report.py <dax_run> <sql_run> <fabric_run> --name <batch> --out artifacts/reports/<name>.html
+Run: .\.venv\Scripts\python.exe scripts\reporting\build_benchmark_report.py <dax_run> <sql_run> <fabric_run> --name <batch>
+    --out artifacts/benchmarks/<folder>/reports/<batch>-report.html
     [--dataset <copy the runs used>] [--note "limitation shown in the report"]... [--concurrency-test artifacts/concurrency/<batch>]
 Accuracy is split by question category; every other measure covers all questions.
 """
@@ -15,12 +16,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scorecard import foundry_tool_spans
+from build_benchmark_scorecard import foundry_tool_spans
 
 from foundry_eval.analysis import load_tables
 from foundry_eval.dataset import load_dataset
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 ARMS = ["dax", "sql", "fabric"]
 NAME = {"dax": "DAX agent", "sql": "SQL agent", "fabric": "Data Agent"}
 ZERO = {
@@ -232,7 +233,7 @@ def in_flight(attempts: pd.DataFrame, workers: int) -> dict:
 
 
 def load_concurrency_test(path: Path | None) -> dict | None:
-    """Rows of a scripts/concurrency_test.py summary table; defaults to the newest test under artifacts/concurrency."""
+    """Rows of a scripts/evaluation/benchmark_agent_concurrency.py summary table; defaults to the newest test under artifacts/concurrency."""
     if path is None:
         found = sorted((ROOT / "artifacts" / "concurrency").glob("*/summary.md"), key=lambda p: p.stat().st_mtime)
         if not found:
@@ -853,8 +854,8 @@ def build(m: dict, run_ids: list[str], name: str, notes: list[str]) -> str:
         w(f"<tr><td>{q}</td>{''.join(cells)}</tr>")
     w("</table></div>")
 
-    w(f"<footer>Runs: {esc(', '.join(run_ids))}. Built from <code>artifacts/runs</code> by <code>scripts/build_report.py</code>; "
-      f"the full per-answer and per-tool-call metrics are in <code>artifacts/metrics/{esc(name)}/</code>.</footer>")
+    w(f"<footer>Runs: {esc(', '.join(run_ids))}. Built from <code>artifacts/runs</code> by <code>scripts/reporting/build_benchmark_report.py</code>; "
+      f"the full per-answer and per-tool-call metrics are in the batch's folder under <code>artifacts/benchmarks/</code>.</footer>")
     w("</main></body></html>")
     return re.sub(r"<(h[23])>(.*?)</\1>", lambda mt: f'<{mt[1]} id="{_slug(mt[2])}">{mt[2]}</{mt[1]}>',
                   "".join(s).replace("<table>", "<div class='tw'><table>").replace("</table>", "</table></div>"))

@@ -1,6 +1,6 @@
 """Read-only probe of the Foundry project: connections, agents, and one throwaway model call.
 
-Run: .\.venv\Scripts\python.exe scripts\foundry_probe.py [--effort low|medium|high|xhigh|none]
+Run: .\.venv\Scripts\python.exe scripts\agent-management\foundry_probe.py [--effort low|medium|high|xhigh|none]
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def main() -> int:
     parser.add_argument("--model", default=None, help="Deployment to call; defaults to FOUNDRY_AGENT_MODEL")
     args = parser.parse_args()
 
-    load_env(Path(__file__).resolve().parents[1] / ".env")
+    load_env(Path(__file__).resolve().parents[2] / ".env")
     endpoint = os.environ["FOUNDRY_PROJECT_ENDPOINT"]
     model = args.model or os.environ["FOUNDRY_AGENT_MODEL"]
 

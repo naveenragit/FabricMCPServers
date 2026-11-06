@@ -1,11 +1,11 @@
 """Run the evaluation dataset through the Foundry agents and record every attempt (plan section 7).
 
-Run: .\.venv\Scripts\python.exe scripts\run_eval.py [--arms dax sql fabric] [--repeats 3] [--ids Q01,Q02]
+Run: .\.venv\Scripts\python.exe scripts\evaluation\run_agent_benchmark.py [--arms dax sql fabric] [--repeats 3] [--ids Q01,Q02]
     [--judge-workers 16] [--scoring judge|deterministic] [--no-evaluate] [--no-traces]
 Each arm gets its own run under artifacts/runs/ and its own worker pool, so a slow arm does not hold back a fast one; the
 arms run at the same time. Within an arm the questions that took longest in earlier runs start first. Each finished
 attempt is scored right away (deterministic checks, the judge only where needed), and Foundry traces are joined at the
-end. Re-running scripts/evaluate_runs.py later fills any gaps.
+end. Re-running scripts/evaluation/score_recorded_runs.py later fills any gaps.
 Arm 3 needs the proxy and the dev tunnel up (servers/fabric-data-agent-proxy-mcp/scripts/serve-local.ps1, then devtunnel host).
 """
 
@@ -41,7 +41,7 @@ from foundry_eval.tool_timings import join_proxy_timings, join_server_spans, rea
 
 install_dns_retry()
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "artifacts" / "runs"
 HARNESS_VERSION = "0.3"
 FULL_OUTPUT = 400_000  # keep whole tool outputs so evaluators can trace figures
@@ -145,7 +145,7 @@ def preflight_stub() -> None:
     try:
         tools = asyncio.run(asyncio.wait_for(probe(), 60))
     except Exception as exc:
-        sys.exit(f"the R12 stub is not reachable through the tunnel ({type(exc).__name__}). Start scripts\\serve_stubs.py.")
+        sys.exit(f"the R12 stub is not reachable through the tunnel ({type(exc).__name__}). Start scripts\\evaluation\\serve_stubs.py.")
     print(f"R12 stub reachable, tools: {tools}")
 
 
@@ -254,7 +254,7 @@ def main() -> int:
     parser.add_argument("--repeats", type=int)
     parser.add_argument("--workers", type=parse_workers, default=dict(DEFAULT_WORKERS), help="per-arm agent workers, e.g. dax=4,fabric=8")
     parser.add_argument("--judge-workers", type=int, default=16)
-    parser.add_argument("--no-evaluate", action="store_true", help="record attempts only; score later with evaluate_runs.py")
+    parser.add_argument("--no-evaluate", action="store_true", help="record attempts only; score later with score_recorded_runs.py")
     parser.add_argument("--scoring", choices=SCORING_MODES, default="judge", help="deterministic: no LLM judge; undecided criteria are needs_review")
     parser.add_argument("--no-traces", action="store_true")
     parser.add_argument("--proxy-log", help="arm 3 proxy's log file; its per-call timings are joined onto the tool calls")
@@ -318,7 +318,7 @@ def main() -> int:
         try:
             store.add_evaluations(evaluate_attempt(attempt, steps, row, only or evaluators, config, judge_model=judge_model))
             key = "scored"
-        except Exception as exc:  # a scoring failure must not stop the run; evaluate_runs.py fills the gap
+        except Exception as exc:  # a scoring failure must not stop the run; score_recorded_runs.py fills the gap
             print(f"  scoring failed for {attempt.arm} {attempt.question_id}: {type(exc).__name__}: {exc}", flush=True)
             key = "score_errors"
         with lock:
@@ -379,7 +379,8 @@ def main() -> int:
         else:
             print("proxy timings: no --proxy-log given (or file missing); Data Agent call breakdown not joined", flush=True)
     ids = " ".join(s.run.run_id for s in stores.values())
-    print(f"total {(time.monotonic() - started) / 60:.1f} min. Scorecard: scripts/scorecard.py {ids} --out artifacts/scorecards/{args.batch}.md", flush=True)
+    print(f"total {(time.monotonic() - started) / 60:.1f} min. Scorecard: scripts/reporting/build_benchmark_scorecard.py {ids} "
+          f"--out artifacts/benchmarks/<date>-{args.batch}/scorecard/{args.batch}.md", flush=True)
     return 0
 
 

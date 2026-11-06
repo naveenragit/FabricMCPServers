@@ -16,7 +16,7 @@ Source: [../sm_wealth_mgmt_import.pbix](../sm_wealth_mgmt_import.pbix).
 
 **Adversarial-review qualification (2026-09-11):** complete JSON parsing reconfirmed the inventory, all 53 nonblank DAX definitions, all 33 resolvable relationship endpoints, the 28/5 activity split and one extracted RLS filter record. “No extraction errors” means selected reader calls succeeded, not that every native property was extracted. The full role inventory, relationship security-filter behavior, and measure visibility/type/format/lineage remain unavailable from this selected output. The report walker finds direct references but does not resolve all source aliases, hierarchy-level bindings, report-level filters or textbox content; it cannot certify whole-report validity. No additional business rows or live queries were read during review.
 
-Reproducible reader: [../scripts/inspect_pbix.py](../scripts/inspect_pbix.py).
+Reproducible reader: [../scripts/model-inspection/inspect_pbix.py](../scripts/model-inspection/inspect_pbix.py).
 
 Private, git-ignored evidence:
 
