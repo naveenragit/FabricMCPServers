@@ -567,7 +567,6 @@ wealth-management-mcp/
 │   ├── runbook.md
 │   └── decisions/
 ├── .vscode/mcp.json
-├── .github/workflows/ci.yml
 └── artifacts/                         # ignored private outputs; never server source
 ```
 
@@ -605,15 +604,15 @@ These are dependency choices, not packages installed by this plan update. Resolv
 - No tokens in checked-in configuration. Validate settings at startup; separate operational bindings from semantic descriptions. Logs go to stderr for stdio; stdout is MCP only. Custom unauthenticated health routes must reveal no private model data.
 - No new cloud resources are needed for the first local façade proof. Hosting selection/deployment is a later explicit step.
 
-### 8.5 Runtime, environment, packaging, and CI
+### 8.5 Runtime, environment, packaging, and verification
 
-- **Python 3.11 is mandatory**, not “3.11 or newer”: declare `requires-python = ">=3.11,<3.12"`, pin the interpreter selector to `3.11`, and run local checks/CI/release smoke tests on 3.11. Use current patched 3.11 releases without silently upgrading the minor version.
+- **Python 3.11 is mandatory**, not “3.11 or newer”: declare `requires-python = ">=3.11,<3.12"`, pin the interpreter selector to `3.11`, and run local checks and release smoke tests on 3.11. Use current patched 3.11 releases without silently upgrading the minor version.
 - Reuse the existing repository-root **Python 3.11.15 x64 virtual environment** for this Windows workspace. Confirm both interpreter version and virtual-environment status before installs. Do not recreate it, use the unrelated environment on PATH, or install globally.
 - Use `uv` as the single future project dependency/lock manager, targeting that existing environment explicitly. Introduce it for project management during scaffolding; prior usage only downloaded the inspection runtime. If it proposes replacing the interpreter/environment, stop and review rather than accepting implicitly.
 - Separate runtime, development, and optional inspection dependencies. Keep [../requirements-inspection.txt](../requirements-inspection.txt) as the current inspection record; migrate it to the single project dependency definition or generate it from the lock when scaffolding, rather than hand-maintaining conflicting pins.
 - The x64 choice is needed for the inspected PBIXRay native wheels on this ARM64 machine, not an inherent restriction of MCP. Verify runtime-only dependencies on the intended host; do not install the PBIX parser merely to run the cloud-backed server.
 - Provide installed entry points `wealth-management-mcp` and `wealth-management-metadata`; also support `python -m wealth_management_mcp`. The CLI selects stdio/HTTP explicitly. VS Code launches the repository interpreter or installed locked package, not an ambient/latest tool environment.
-- CI performs locked dependency sync, Ruff checks/format verification, mypy, focused pytest checks, and wheel build/install smoke testing on Python 3.11. Live Power BI tests remain opt-in and secret-backed. Ship public package/schema resources only; exclude PBIX, private catalogs, credentials, and test business rows.
+- Verification runs locally, with no GitHub workflow: Ruff, mypy, focused pytest checks, and a wheel build on Python 3.11. The commands are in [Verify and package](../semantic-model-mcp/README.md#verify-and-package). Live Power BI tests remain opt-in and secret-backed. Ship public package/schema resources only; exclude PBIX, private catalogs, credentials, and test business rows.
 
 ## 9. Metadata acquisition and model preparation
 
@@ -630,7 +629,7 @@ These are dependency choices, not packages installed by this plan update. Resolv
 - **Author PBIP/TMDL export:** suitable controlled authoring input, without giving runtime users Write privileges. The Python runtime consumes normalized JSON; do not add a managed runtime or ad-hoc regex TMDL parser to load it.
 - **Fabric getDefinition:** returns TMDL or TMSL, with immediate or long-running responses. Prefer documented **TMSL JSON** for the Python author-side importer where supported, while retaining TMDL for author review. Requires documented Read + Write permissions and relevant ReadWrite delegated scopes; Build alone is not enough. Export may be unsupported for an item or blocked by encrypted sensitivity labels. [S11]
 - **External XMLA author export:** available in eligible workspaces and permissions, but optional and outside the Python process. Reader-visible consumption metadata is not equivalent to unrestricted internal author metadata. No TOM/ADOMD dependency is added to this implementation. [S12]
-- **Offline PBIXRay:** useful planning/CI extraction fallback with parser version/provenance, not a Microsoft engine or a substitute for live compatibility verification. [S23]
+- **Offline PBIXRay:** useful planning and offline-check extraction fallback with parser version/provenance, not a Microsoft engine or a substitute for live compatibility verification. [S23]
 
 The existing author baseline contains 53 nonempty formulas. That does not establish that every runtime user may receive them. Use a property-availability manifest and an approved disclosure policy. Native `INFO.VIEW.MEASURES` documents Write-dependent formula availability; this is evidence that formula access needs scrutiny, **not** a claim that the remote MCP follows that function's exact rule or that INFO is available through Execute Queries REST. [S32]
 
@@ -658,7 +657,7 @@ Prioritize AUM, pipeline, and advisor semantics before describing every incident
 | **3 — Scaffold and build profile pipeline** | Python package/lock; generated derivative of pinned OSSIE; DAX object mapping; extension/semantic validators; naming/provenance/freshness | Installable package, versioned profile, private full baseline and authorized views | All approved measures first-class; all relationship states retained; no fabricated DAX or completeness |
 | **4 — Implement Microsoft tool surface** | Schema + execution vertical slice, then required report capability and licensed Generate Query; preserve captured inputs and declare adapted schema output | Local façade with a subset/all four documented capabilities and status manifest | Schema→context→query/result works; report bindings valid; no unapproved metric tools; disabled generation not advertised as implemented |
 | **5 — Restricted MCAPS POC hosting** | Select MCAPS subscription/compute; deploy SDK ASGI/Uvicorn without client auth; configure restricted ingress and backend credentials; verify deadlines/bounds | Hosted Python POC endpoint and operator runbook | Trusted client connects without login; outside access denied; backend identity and Fabric binding verified; no per-user isolation claim |
-| **6 — Validate and hand over** | Ruff/mypy/pytest on 3.11, wheel smoke test, model-owner acceptance, CI, private-data exclusions, deployment/runbook review | Test evidence, locked version manifest, runbook, Python release package | Acceptance checklist below passes; explicit approval before deployment |
+| **6 — Validate and hand over** | Ruff/mypy/pytest on 3.11, wheel smoke test, model-owner acceptance, private-data exclusions, deployment/runbook review | Test evidence, locked version manifest, runbook, Python release package | Acceptance checklist below passes; explicit approval before deployment |
 
 Offline Python packaging/profile/mapping/tests can start immediately using the existing artifacts. Complete live backend/binding and POC exposure checks before cloud execution/deployment. Keep one backend and **Microsoft's four-role target**, beginning with schema/execution; do not substitute metric tools. Multi-user OAuth/OBO and advisor isolation are not initial POC tasks.
 
@@ -677,7 +676,7 @@ Offline Python packaging/profile/mapping/tests can start immediately using the e
 ### Python runtime and package
 
 - [ ] Server, metadata utility, and tests run on Python 3.11 from the root virtual environment; no .NET/CLR runtime is required.
-- [ ] Python requirement, interpreter selector, lockfile, and CI agree on 3.11; no global installation or unintended environment replacement.
+- [ ] Python requirement, interpreter selector, and lockfile agree on 3.11; no global installation or unintended environment replacement.
 - [ ] Ruff, mypy, and focused pytest checks pass; the built wheel imports and exposes bundled validation schemas outside the repository working directory.
 - [ ] Runtime installation excludes optional PBIX inspection dependencies; actual client/server SDK compatibility is verified using the locked versions.
 
@@ -720,7 +719,7 @@ Offline Python packaging/profile/mapping/tests can start immediately using the e
 - [ ] Existing RLS/OLS is preserved; observed behavior is described without claiming multi-user advisor isolation. Two-user security validation is deferred to a future authenticated mode.
 - [ ] HTTPS/Host/Origin/local-binding and ingress checks pass; CORS alone is not called a network boundary.
 - [ ] Deadlines/byte limits apply at documented boundaries; timeout does not claim remote engine cancellation. Liveness/readiness are distinguished.
-- [ ] CI has no live PBIX, tokens, or result fixtures; live tests are opt-in.
+- [ ] Local checks use no live PBIX, tokens, or result fixtures; live tests are opt-in.
 - [ ] Runbook covers backend sign-in/renewal where required, target IDs, restricted client connectivity, schema refresh/drift, preview changes, shutdown and rollback.
 
 A few focused tests and one end-to-end demonstration are enough for the POC beyond the genuine security/correctness gates above. Load-testing infrastructure, broad model benchmarks, and exhaustive matrices are not initial requirements.
