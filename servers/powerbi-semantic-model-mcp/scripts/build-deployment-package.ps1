@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $projectRoot 'deploy/_stage'
 $zip = Join-Path $projectRoot 'deploy/wealth-management-mcp.zip'

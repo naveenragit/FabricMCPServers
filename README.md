@@ -6,14 +6,14 @@ Development workspace for a read-only MCP façade over a Power BI semantic model
 > semantic model, report, capacity, and managed identity IDs have been replaced with
 > non-functional values such as `<workspace-id>`, and the App Service
 > name with `<app-name>`. Substitute your own before deploying — see
-> [semantic-model-mcp/docs/azure-deployment.md](semantic-model-mcp/docs/azure-deployment.md).
+> [servers/powerbi-semantic-model-mcp/docs/azure-deployment.md](servers/powerbi-semantic-model-mcp/docs/azure-deployment.md).
 >
 > The source `.pbix` is deliberately **not** published; it stays git-ignored. Regenerate the
 > catalog from your own model with `scripts/inspect_pbix.py` and the `export` command.
 
 ## Deliverables
 
-- **[semantic-model-mcp/README.md](semantic-model-mcp/README.md)** — implemented Python package, local preview, verification results and live-integration steps.
+- **[servers/powerbi-semantic-model-mcp/README.md](servers/powerbi-semantic-model-mcp/README.md)** — implemented Python package, local preview, verification results and live-integration steps.
 - **[docs/implementation-plan.md](docs/implementation-plan.md)** — architecture, OSSIE/DAX compatibility, MCP tool contracts, naming, folder structure, authentication, phased backlog, and acceptance criteria.
 - **[docs/foundry-agent-evaluation-plan.md](docs/foundry-agent-evaluation-plan.md)** — Foundry agent evaluation plan: three agents (semantic model, lakehouse tables, Fabric data agent), evaluation criteria for agentic capability, response quality, and risk, and the phased delivery plan. Awaiting review. Supersedes [docs/foundry-evaluation-plan.md](docs/foundry-evaluation-plan.md).
 - **[docs/evaluation-risk-questions.md](docs/evaluation-risk-questions.md)** — 29 added risk and behavior prompts and the agent policy they test.
@@ -25,7 +25,7 @@ Development workspace for a read-only MCP façade over a Power BI semantic model
 
 ## Current status
 
-The Python package is implemented under **[semantic-model-mcp](semantic-model-mcp/README.md)**. Offline generation/validation and MCP stdio/HTTP resources work; pytest, Ruff, and mypy pass, and the wheel's bundled schema resources were verified outside the source folder. The actual catalog preserves **15 tables, 171 columns, 54 measures, 37 relationships** (model update 2026-11-05).
+The Python package is implemented under **[semantic-model-mcp](servers/powerbi-semantic-model-mcp/README.md)**. Offline generation/validation and MCP stdio/HTTP resources work; pytest, Ruff, and mypy pass, and the wheel's bundled schema resources were verified outside the source folder. The actual catalog preserves **15 tables, 171 columns, 54 measures, 37 relationships** (model update 2026-11-05).
 
 The project-owned `fabric_rest` backend is deployed and has executed live DAX through the Arrow-returning `executeDaxQueries` endpoint. Microsoft's native preview MCP endpoint remains blocked by its disabled tenant setting, so the `remote_mcp` mode still exposes zero invented Microsoft tools. Version **0.2.0** adds a disabled-by-default, allowlisted operator probe for testing the `effectiveUsername` Read versus Build requirement; it does not add per-caller identity propagation.
 
@@ -55,4 +55,4 @@ The source PBIX, extracted artifacts, virtual environment, downloaded runtime, a
 
 Released under the [MIT License](LICENSE).
 
-The vendored Apache OSSIE schema under `semantic-model-mcp/src/wealth_management_mcp/schemas/` keeps its own Apache-2.0 [LICENSE](semantic-model-mcp/src/wealth_management_mcp/schemas/LICENSE) and [NOTICE](semantic-model-mcp/src/wealth_management_mcp/schemas/NOTICE); see [PROVENANCE.md](semantic-model-mcp/src/wealth_management_mcp/schemas/PROVENANCE.md). This project is a derivative work and is **not** unmodified OSSIE, nor endorsed by the Apache Software Foundation.
+The vendored Apache OSSIE schema under `servers/powerbi-semantic-model-mcp/src/wealth_management_mcp/schemas/` keeps its own Apache-2.0 [LICENSE](servers/powerbi-semantic-model-mcp/src/wealth_management_mcp/schemas/LICENSE) and [NOTICE](servers/powerbi-semantic-model-mcp/src/wealth_management_mcp/schemas/NOTICE); see [PROVENANCE.md](servers/powerbi-semantic-model-mcp/src/wealth_management_mcp/schemas/PROVENANCE.md). This project is a derivative work and is **not** unmodified OSSIE, nor endorsed by the Apache Software Foundation.

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "semantic-model-mcp" / "src"))
+sys.path.insert(0, str(ROOT / "servers" / "powerbi-semantic-model-mcp" / "src"))
 
 os.environ.update(
     {

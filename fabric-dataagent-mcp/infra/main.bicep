@@ -7,10 +7,10 @@ param location string = resourceGroup().location
 @description('Prefix for the new web app name.')
 param namePrefix string = 'fabric-proxy-mcp'
 
-@description('Existing App Service plan created by semantic-model-mcp/infra/main.bicep.')
+@description('Existing App Service plan created by servers/powerbi-semantic-model-mcp/infra/main.bicep.')
 param planName string = 'asp-wealth-mcp'
 
-@description('Existing VNet and delegated subnet created by semantic-model-mcp/infra/main.bicep.')
+@description('Existing VNet and delegated subnet created by servers/powerbi-semantic-model-mcp/infra/main.bicep.')
 param vnetName string = 'vnet-wealth-mcp'
 param appSubnetName string = 'snet-app'
 

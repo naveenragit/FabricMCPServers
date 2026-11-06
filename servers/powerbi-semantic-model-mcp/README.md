@@ -1,6 +1,6 @@
 # Wealth Management MCP
 
-Python **3.11** implementation of the [project plan](../docs/implementation-plan.md), inside the existing project. The Python environment, PBIX, and private generated artifacts stay in the parent project. No nested environment, additional Fabric workspace, cloud deployment, or model-security change is created.
+Python **3.11** implementation of the [project plan](../../docs/implementation-plan.md), inside the existing project. The Python environment, PBIX, and private generated artifacts stay in the parent project. No nested environment, additional Fabric workspace, cloud deployment, or model-security change is created.
 
 ## Implemented and verified
 
@@ -229,7 +229,7 @@ setting silently excludes it and looks exactly like the setting being off.
 
 **4. Hard blocks no setting overrides.** Service principals cannot use these endpoints against
 a model with **RLS** or with **SSO** enabled. Neither applies here — confirmed as `0` RLS roles
-and `PbixInImportMode` via [scripts/check_model_rls.py](../scripts/check_model_rls.py), which
+and `PbixInImportMode` via [scripts/check_model_rls.py](../../scripts/check_model_rls.py), which
 uses the admin scanner because `INFO.ROLES()` is blocked through Execute Queries.
 
 ### Reading the failure modes
@@ -276,7 +276,7 @@ The lock currently references the available Microsoft package mirror. **SDK 2.1.
 ## Generate and inspect the actual catalog
 
 ```powershell
-.\.venv\Scripts\python.exe -m wealth_management_mcp export --metadata artifacts/pbix-inspection/model-metadata.json --summary artifacts/pbix-inspection/inspection-summary.json --overlay semantic-model-mcp/semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml --output artifacts/wealth-management-catalog.json
+.\.venv\Scripts\python.exe -m wealth_management_mcp export --metadata artifacts/pbix-inspection/model-metadata.json --summary artifacts/pbix-inspection/inspection-summary.json --overlay servers/powerbi-semantic-model-mcp/semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml --output artifacts/wealth-management-catalog.json
 .\.venv\Scripts\python.exe -m wealth_management_mcp validate artifacts/wealth-management-catalog.json
 .\.venv\Scripts\python.exe -m wealth_management_mcp status --catalog artifacts/wealth-management-catalog.json
 ```
@@ -285,7 +285,7 @@ This uses extracted metadata, not table rows or a DAX engine. A catalog hash pro
 
 ## Start the local preview
 
-The current parent workspace has [../.vscode/mcp.json](../.vscode/mcp.json). Start **wealth-management-mcp** in VS Code's MCP configuration; it launches the package in stdio mode. The configuration in [.vscode/mcp.json](.vscode/mcp.json) is for opening this child folder as the workspace instead. Both use the existing parent environment and catalog. Debug with VS Code's Python debugger or an MCP client; the SDK's high-level `mcp dev` command is not used for this explicit low-level server.
+The current parent workspace has [../../.vscode/mcp.json](../../.vscode/mcp.json). Start **wealth-management-mcp** in VS Code's MCP configuration; it launches the package in stdio mode. The configuration in [.vscode/mcp.json](.vscode/mcp.json) is for opening this child folder as the workspace instead. Both use the existing parent environment and catalog. Debug with VS Code's Python debugger or an MCP client; the SDK's high-level `mcp dev` command is not used for this explicit low-level server.
 
 For HTTP:
 
@@ -325,10 +325,10 @@ Defaults: 60-second overall request deadline, 1,000 total rows at reviewed respo
 ## Verify and package
 
 ```powershell
-.\.venv\Scripts\python.exe -m ruff check semantic-model-mcp/src semantic-model-mcp/tests
-.\.venv\Scripts\python.exe -m mypy --config-file semantic-model-mcp/pyproject.toml --follow-imports silent semantic-model-mcp/src
-.\.venv\Scripts\python.exe -m pytest semantic-model-mcp/tests -q
-uv build --project semantic-model-mcp --python .venv/Scripts/python.exe --wheel --out-dir semantic-model-mcp/dist --system-certs
+.\.venv\Scripts\python.exe -m ruff check servers/powerbi-semantic-model-mcp/src servers/powerbi-semantic-model-mcp/tests
+.\.venv\Scripts\python.exe -m mypy --config-file servers/powerbi-semantic-model-mcp/pyproject.toml --follow-imports silent servers/powerbi-semantic-model-mcp/src
+.\.venv\Scripts\python.exe -m pytest servers/powerbi-semantic-model-mcp/tests -q
+uv build --project semantic-model-mcp --python .venv/Scripts/python.exe --wheel --out-dir servers/powerbi-semantic-model-mcp/dist --system-certs
 ```
 
 Vendored OSSIE retains its Apache license/notice. This project-specific derivative is **not unmodified OSSIE, Apache-endorsed DAX support, a complete Fabric round-trip exporter, or verified Microsoft wire compatibility**.

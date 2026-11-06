@@ -18,9 +18,9 @@ Test two hypotheses separately: semantic context improves answer accuracy, and p
 
 All calculations execute in the underlying database or semantic engine through the assigned MCP connection. Agents author queries and explain returned results; they do not use a code interpreter or a separate calculation tool.
 
-The project already has 15 tables, 171 columns, 53 DAX measures, and 33 relationships; draft semantic descriptions; and a project-owned MCP server with schema and DAX tools. The [package README](../semantic-model-mcp/README.md) records live execution through the `fabric_rest` backend. Microsoft's native preview MCP endpoint is not required for this experiment. Existing implementation tests are not agent-quality evaluations.
+The project already has 15 tables, 171 columns, 53 DAX measures, and 33 relationships; draft semantic descriptions; and a project-owned MCP server with schema and DAX tools. The [package README](../servers/powerbi-semantic-model-mcp/README.md) records live execution through the `fabric_rest` backend. Microsoft's native preview MCP endpoint is not required for this experiment. Existing implementation tests are not agent-quality evaluations.
 
-The [model assessment](model-assessment.md) and [semantic overlay](../semantic-model-mcp/semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml) identify unverified business definitions, inactive account relationships, missing transaction-date relationships, and snapshot aggregation caveats. Validate the scenarios we use before creating answer keys. The MCP schema is an author snapshot, not automatic live metadata synchronization.
+The [model assessment](model-assessment.md) and [semantic overlay](../servers/powerbi-semantic-model-mcp/semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml) identify unverified business definitions, inactive account relationships, missing transaction-date relationships, and snapshot aggregation caveats. Validate the scenarios we use before creating answer keys. The MCP schema is an author snapshot, not automatic live metadata synchronization.
 
 ## 2. Foundry evaluation approach
 

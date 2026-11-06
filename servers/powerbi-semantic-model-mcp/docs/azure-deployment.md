@@ -26,7 +26,7 @@ Regenerate the catalog against these IDs with:
 python -m wealth_management_mcp export `
   --metadata artifacts/pbix-inspection/model-metadata.json `
   --summary artifacts/pbix-inspection/inspection-summary.json `
-  --overlay semantic-model-mcp/semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml `
+  --overlay servers/powerbi-semantic-model-mcp/semantic-models/sm_wealth_mgmt_import/semantic-overlay.yaml `
   --output artifacts/wealth-management-catalog-mcaps.json `
   --model-id <semantic-model-id> `
   --workspace-id <workspace-id> `
