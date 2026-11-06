@@ -275,14 +275,14 @@ What Phase A did:
 - Gate: all 144 protected files match their Phase 0 hashes, and the regenerated `full-4` scorecard, metrics, and report and the `full-3` scorecard and metrics match the baseline.
 - Left for Phase B, because these files move or are renamed there: default output paths and help text naming old artifact folders in `run_eval.py` (closing hint), `scorecard.py` (help), `build_report.py` (help and report footer), `check_model_rls.py` (scan output), and `foundry_smoke_agents.py` (docstring). None of them is an input, so nothing breaks. Changing the report footer changes report output, so the gate baseline is then refreshed for that one line.
 
-Phase B: code-touching moves, one small step at a time - done 2026-11-06, except the live end-to-end check
+Phase B: code-touching moves, one small step at a time - done 2026-11-06
 
 - [x] Apply the new ignore rules before moving the dataset.
 - [x] Move one server project at a time with `git mv`. Fix its paths, reinstall it editable, check the import location, run its tests, and start it offline. Commit after each server.
 - [x] Move the evaluation harness and datasets. Check the import location, run the harness tests and the dataset validator (hash unchanged). Commit.
 - [x] Move and rename scripts by group. Fix root depth and script-to-script imports, check each script's computed repository root, and run the touched commands offline. Commit after each group.
 - [x] Refresh READMEs and documentation links. Commit.
-- [ ] Final gate: run the section 13 checks, then one end-to-end question per arm, with your go-ahead. Present the final folder map and commands. The offline checks pass; the live end-to-end question per arm is still waiting for your go-ahead.
+- [x] Final gate: run the section 13 checks, then one end-to-end question per arm, with your go-ahead. Present the final folder map and commands. A review of every change found two leftover old-folder commands (`uv --project` in the semantic model README) and a mixed-separator usage line, which were fixed. The live check then ran three questions on all three agents, entirely from the new paths. The results are in the git-ignored `artifacts/benchmarks/2026-11-06-e2e-11-restructure-check/`, and the protected-file gate still passed afterwards.
 
 What Phase B did:
 
