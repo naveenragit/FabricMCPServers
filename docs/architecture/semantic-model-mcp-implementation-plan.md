@@ -5,9 +5,9 @@
 **Required implementation runtime:** Python **3.11** for the server, metadata utilities, and tests; no .NET application or runtime dependency.  
 **Objective:** a read-only, well-named MCP server that exposes the supplied Power BI semantic model with Apache OSSIE-aligned metadata and useful, accurate descriptions.
 
-**Implementation checkpoint (2026-09-11):** code now lives in [../servers/powerbi-semantic-model-mcp/README.md](../servers/powerbi-semantic-model-mcp/README.md), reusing the parent Python 3.11 environment. Offline profile generation/validation, draft semantic descriptions, MCP resources, stdio/HTTP hosting, reviewed-contract live adapters, bounds and safe errors are implemented. 34 tests, Ruff and mypy pass, and wheel resource loading plus actual-PBIX stdio retrieval were verified. Official SDK **2.1.1** replaces planned 2.2.0 due mirror availability/TLS download constraints. Live discovery returned **HTTP 403 / MCP -32003**; real tool signatures, live backend behavior, model freshness and cloud deployment remain unverified. Offline mode exposes resources only, not fabricated Microsoft tools. This checkpoint supersedes the future-tense scaffold claims below; remaining sections retain the target design.
+**Implementation checkpoint (2026-09-11):** code now lives in [../servers/powerbi-semantic-model-mcp/README.md](../../servers/powerbi-semantic-model-mcp/README.md), reusing the parent Python 3.11 environment. Offline profile generation/validation, draft semantic descriptions, MCP resources, stdio/HTTP hosting, reviewed-contract live adapters, bounds and safe errors are implemented. 34 tests, Ruff and mypy pass, and wheel resource loading plus actual-PBIX stdio retrieval were verified. Official SDK **2.1.1** replaces planned 2.2.0 due mirror availability/TLS download constraints. Live discovery returned **HTTP 403 / MCP -32003**; real tool signatures, live backend behavior, model freshness and cloud deployment remain unverified. Offline mode exposes resources only, not fabricated Microsoft tools. This checkpoint supersedes the future-tense scaffold claims below; remaining sections retain the target design.
 
-**Evaluation follow-up (2026-10-09):** the [Foundry agent evaluation plan](foundry-agent-evaluation-plan.md) supersedes the 2026-09-18 three-arm design in [foundry-evaluation-plan.md](foundry-evaluation-plan.md). It evaluates three Foundry agents, each with only its own data path: this server's DAX tools over the semantic model, the lakehouse SQL tools, and a Fabric data agent. It defines criteria for agentic capability, response quality, and risk. It is a plan awaiting review, not completed evaluation work. For live server status after the historical checkpoint above, use the [package README](../servers/powerbi-semantic-model-mcp/README.md#live-status).
+**Evaluation follow-up (2026-10-09):** the [Foundry agent evaluation plan](../evaluation/three-agent-evaluation-plan.md) supersedes the 2026-09-18 three-arm design in [foundry-evaluation-plan-superseded.md](../archive/foundry-evaluation-plan-superseded.md). It evaluates three Foundry agents, each with only its own data path: this server's DAX tools over the semantic model, the lakehouse SQL tools, and a Fabric data agent. It defines criteria for agentic capability, response quality, and risk. It is a plan awaiting review, not completed evaluation work. For live server status after the historical checkpoint above, use the [package README](../../servers/powerbi-semantic-model-mcp/README.md#live-status).
 
 ### Confirmed POC scope — 2026-09-11
 
@@ -37,7 +37,7 @@ This POC decision supersedes the earlier shared-user OAuth/OBO prerequisite. Ref
 | Transport, protocol envelopes and authorization discovery | MCP specification and compatible official Python SDK [S13–S19] | Python names do not override protocol or externally defined wire keys |
 | Calculation, model permissions and native metadata meaning | Power BI/Fabric engine and documented native contracts | No replacement DAX engine, invented joins, or application-side RLS substitute |
 
-This supersedes the previous six `wealth_*` tools and extension-only primary metric catalog. Review findings and remaining evidence gates: [adversarial-review.md](adversarial-review.md).
+This supersedes the previous six `wealth_*` tools and extension-only primary metric catalog. Review findings and remaining evidence gates: [implementation-plan-adversarial-review.md](implementation-plan-adversarial-review.md).
 
 ## 1. Executive recommendation
 
@@ -65,7 +65,7 @@ Use one installable Python package with a `src` layout, Pydantic request/respons
 
 ## 2. Evidence baseline and known blockers
 
-Full assessment: [model-assessment.md](model-assessment.md).
+Full assessment: [semantic-model-assessment.md](semantic-model-assessment.md).
 
 The inspected PBIX has **15 logical tables, 171 columns, 53 measures, and 33 relationships (28 active, 5 inactive)**, with seven report pages. No table/column/measure descriptions were populated. The embedded AI schema and prompt lists are empty.
 
@@ -609,10 +609,10 @@ These are dependency choices, not packages installed by this plan update. Resolv
 - **Python 3.11 is mandatory**, not “3.11 or newer”: declare `requires-python = ">=3.11,<3.12"`, pin the interpreter selector to `3.11`, and run local checks and release smoke tests on 3.11. Use current patched 3.11 releases without silently upgrading the minor version.
 - Reuse the existing repository-root **Python 3.11.15 x64 virtual environment** for this Windows workspace. Confirm both interpreter version and virtual-environment status before installs. Do not recreate it, use the unrelated environment on PATH, or install globally.
 - Use `uv` as the single future project dependency/lock manager, targeting that existing environment explicitly. Introduce it for project management during scaffolding; prior usage only downloaded the inspection runtime. If it proposes replacing the interpreter/environment, stop and review rather than accepting implicitly.
-- Separate runtime, development, and optional inspection dependencies. Keep [../requirements-inspection.txt](../requirements-inspection.txt) as the current inspection record; migrate it to the single project dependency definition or generate it from the lock when scaffolding, rather than hand-maintaining conflicting pins.
+- Separate runtime, development, and optional inspection dependencies. Keep [../requirements-inspection.txt](../../requirements-inspection.txt) as the current inspection record; migrate it to the single project dependency definition or generate it from the lock when scaffolding, rather than hand-maintaining conflicting pins.
 - The x64 choice is needed for the inspected PBIXRay native wheels on this ARM64 machine, not an inherent restriction of MCP. Verify runtime-only dependencies on the intended host; do not install the PBIX parser merely to run the cloud-backed server.
 - Provide installed entry points `wealth-management-mcp` and `wealth-management-metadata`; also support `python -m wealth_management_mcp`. The CLI selects stdio/HTTP explicitly. VS Code launches the repository interpreter or installed locked package, not an ambient/latest tool environment.
-- Verification runs locally, with no GitHub workflow: Ruff, mypy, focused pytest checks, and a wheel build on Python 3.11. The commands are in [Verify and package](../servers/powerbi-semantic-model-mcp/README.md#verify-and-package). Live Power BI tests remain opt-in and secret-backed. Ship public package/schema resources only; exclude PBIX, private catalogs, credentials, and test business rows.
+- Verification runs locally, with no GitHub workflow: Ruff, mypy, focused pytest checks, and a wheel build on Python 3.11. The commands are in [Verify and package](../../servers/powerbi-semantic-model-mcp/README.md#verify-and-package). Live Power BI tests remain opt-in and secret-backed. Ship public package/schema resources only; exclude PBIX, private catalogs, credentials, and test business rows.
 
 ## 9. Metadata acquisition and model preparation
 

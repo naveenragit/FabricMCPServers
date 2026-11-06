@@ -4,7 +4,7 @@
 
 ## 1. Evidence and scope
 
-Source: [../sm_wealth_mgmt_import.pbix](../sm_wealth_mgmt_import.pbix).
+Source: [../sm_wealth_mgmt_import.pbix](../../sm_wealth_mgmt_import.pbix).
 
 - Size: **163,996,355 bytes**.
 - SHA-256: `e2ebaed09bde67982c1c2de368fcdd02f4ecdb7ce880bef35b684514111ee58a`.
@@ -16,13 +16,13 @@ Source: [../sm_wealth_mgmt_import.pbix](../sm_wealth_mgmt_import.pbix).
 
 **Adversarial-review qualification (2026-09-11):** complete JSON parsing reconfirmed the inventory, all 53 nonblank DAX definitions, all 33 resolvable relationship endpoints, the 28/5 activity split and one extracted RLS filter record. “No extraction errors” means selected reader calls succeeded, not that every native property was extracted. The full role inventory, relationship security-filter behavior, and measure visibility/type/format/lineage remain unavailable from this selected output. The report walker finds direct references but does not resolve all source aliases, hierarchy-level bindings, report-level filters or textbox content; it cannot certify whole-report validity. No additional business rows or live queries were read during review.
 
-Reproducible reader: [../scripts/model-inspection/inspect_pbix.py](../scripts/model-inspection/inspect_pbix.py).
+Reproducible reader: [../scripts/model-inspection/inspect_pbix.py](../../scripts/model-inspection/inspect_pbix.py).
 
 Private, git-ignored evidence:
 
-- [../artifacts/pbix-inspection/inspection-summary.json](../artifacts/pbix-inspection/inspection-summary.json)
-- [../artifacts/pbix-inspection/model-metadata.json](../artifacts/pbix-inspection/model-metadata.json)
-- [../artifacts/pbix-inspection/report-metadata.json](../artifacts/pbix-inspection/report-metadata.json)
+- [../artifacts/pbix-inspection/inspection-summary.json](../../artifacts/pbix-inspection/inspection-summary.json)
+- [../artifacts/pbix-inspection/model-metadata.json](../../artifacts/pbix-inspection/model-metadata.json)
+- [../artifacts/pbix-inspection/report-metadata.json](../../artifacts/pbix-inspection/report-metadata.json)
 
 ## 2. Logical model inventory
 
@@ -173,4 +173,4 @@ Total: **7 pages / 123 visual definitions**, including textboxes, shapes, and bu
 5. Prove account slicing behavior on one approved account before exposing account-level analytics generally.
 6. Run an actual restricted-user cross-client negative test before any shared advisor deployment.
 
-See [implementation-plan.md](implementation-plan.md) for architecture, contracts, standards, and implementation phases.
+See [semantic-model-mcp-implementation-plan.md](semantic-model-mcp-implementation-plan.md) for architecture, contracts, standards, and implementation phases.

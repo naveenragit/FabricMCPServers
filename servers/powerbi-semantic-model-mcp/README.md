@@ -1,6 +1,6 @@
 # Wealth Management MCP
 
-Python **3.11** implementation of the [project plan](../../docs/implementation-plan.md), inside the existing project. The Python environment, PBIX, and private generated artifacts stay in the parent project. No nested environment, additional Fabric workspace, cloud deployment, or model-security change is created.
+Python **3.11** implementation of the [project plan](../../docs/architecture/semantic-model-mcp-implementation-plan.md), inside the existing project. The Python environment, PBIX, and private generated artifacts stay in the parent project. No nested environment, additional Fabric workspace, cloud deployment, or model-security change is created.
 
 ## Implemented and verified
 

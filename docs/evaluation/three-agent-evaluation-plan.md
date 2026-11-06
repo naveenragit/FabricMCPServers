@@ -2,7 +2,7 @@
 
 **Created:** 2026-10-09. **Updated:** 2026-10-12 (data agent confirmed; tool connection steps; fluency and coherence; adversarial review fixes; arm 3 through the data agent MCP endpoint as the signed-in user (service principal rejected, see D15); direct-call fallback removed).
 **Status:** Phase 0 gates are met for arms 1 and 3, and arm 2 is parked (D18). Phase 1 (the 84-row dataset) and Phase 2 (evaluators and the R12 stub) are implemented for arms 1 and 3, G8 passed, and a dev-split pilot (agent version 1) and a full run of all 84 rows with three repeats (agent version 2) have run on both arms and been scored locally (results in the git-ignored results history). The problems the full run found are fixed (agent version 4, D20, D22), and a five-row end-to-end test of the whole pipeline, including the Foundry built-ins in batches of five, has passed. Correctness is now scored numeric-first, with the LLM judge only where needed, and the built-ins are optional (D23); a second five-row test passed with it. The full set has not been re-run on version 4. The proxy is not deployed: it runs on your machine behind a dev tunnel, started on demand.
-**Supersedes:** [foundry-evaluation-plan.md](foundry-evaluation-plan.md), the earlier raw / measure-free / with-measures three-arm design.
+**Supersedes:** [foundry-evaluation-plan-superseded.md](../archive/foundry-evaluation-plan-superseded.md), the earlier raw / measure-free / with-measures three-arm design.
 
 ## 1. Decisions
 
@@ -13,7 +13,7 @@
 | D3 | Numeric tolerance is the larger of the stated tolerance and half a unit of the displayed precision | You |
 | D4 | A trap value is judged by whether it is presented as the answer, not by whether it is mentioned | You |
 | D5 | Bundled criteria are split into one verifiable fact each | You |
-| D6 | Risk coverage extended with 29 added rows ([evaluation-risk-questions.md](evaluation-risk-questions.md)) | You |
+| D6 | Risk coverage extended with 29 added rows ([evaluation-risk-questions-design.md](../archive/evaluation-risk-questions-design.md)) | You |
 | D7 | Named client lists: top-N answers allowed, capped at 50 rows | You |
 | D8 | The judge reads ground truth and criteria from the eval dataset. No required answer format | You |
 | D9 | The Foundry resource, agent model, and judge model are read from `.env`, which you fill in later | You |
@@ -54,7 +54,7 @@ Arm 1 is `wm-dax-agent`, arm 2 is `wm-sql-agent`, and arm 3 is `wm-fabric-agent`
 **Controls shared by all three**
 
 - Same agent model deployment and reasoning effort, from `.env`.
-- Same instruction skeleton: Policy v1 ([evaluation-risk-questions.md](evaluation-risk-questions.md)), one role sentence, one line on the assigned tool, and the shared failure rule that names the tool's server (D20).
+- Same instruction skeleton: Policy v1 ([evaluation-risk-questions-design.md](../archive/evaluation-risk-questions-design.md)), one role sentence, one line on the assigned tool, and the shared failure rule that names the tool's server (D20).
 - Each agent holds only its own data tool. No Code Interpreter, web search, file search, or generic calculator.
 - `allowed_tools` pinned per agent. `require_approval` set to `never` for these read-only tools, because the default `always` stalls an unattended evaluation on the first approval request.
 - A canary string in each system prompt, used to detect prompt leakage deterministically.
@@ -88,7 +88,7 @@ The Foundry resource, agent model, and judge model are read from `.env`. Nothing
 Housekeeping, all part of Phase 0:
 
 - `.env` stays untracked. `.env.example` is tracked and lists the variable names with empty values.
-- The [.gitignore](../.gitignore) ignores `.env` and `.env.*` and already follows them with `!.env.example`, so the template can be tracked. Confirm with `git check-ignore -v .env.example` when creating it.
+- The [.gitignore](../../.gitignore) ignores `.env` and `.env.*` and already follows them with `!.env.example`, so the template can be tracked. Confirm with `git check-ignore -v .env.example` when creating it.
 - The harness reuses the repo-root `.venv` (Python 3.11) and adds a pinned `requirements.txt` under a new `evaluation/harness/` folder, proposed as the harness location. `azure-ai-projects>=2.2.0` is the current minimum for the project Evals client. No global installs.
 - The proxy is a new package, proposed as `servers/fabric-data-agent-proxy-mcp/`, built on the same pattern as `onelake-tables-mcp` and deployed to the existing App Service plan.
 
@@ -131,7 +131,7 @@ Foundry Agent Service accepts only **remote** MCP endpoints, public or private. 
 
 **Checks before adding a server**
 
-1. The endpoint is reachable from the internet and speaks streamable HTTP. Use the full MCP path, which is the server base URL plus `/mcp`. The existing smoke scripts, [smoke_deployed_mcp.py](../scripts/diagnostics/smoke_deployed_mcp.py) and [smoke_onelake_tables.py](../scripts/diagnostics/smoke_onelake_tables.py), exercise that path.
+1. The endpoint is reachable from the internet and speaks streamable HTTP. Use the full MCP path, which is the server base URL plus `/mcp`. The existing smoke scripts, [smoke_deployed_mcp.py](../../scripts/diagnostics/smoke_deployed_mcp.py) and [smoke_onelake_tables.py](../../scripts/diagnostics/smoke_onelake_tables.py), exercise that path.
 2. Tool schemas are acceptable to Foundry. A tool definition that uses `anyOf`, `allOf`, or a parameter with several types is rejected with "Invalid tool schema", and every `inputSchema` needs a `properties` field. Both existing servers' tool definitions comply on review; the proxy's single tool must too. Confirm at gate G2.
 3. Roles on the Foundry project: **Foundry User** for the developer, and **Foundry Project Manager** to create a project connection.
 4. The agent model's region supports the MCP tool.
@@ -250,7 +250,7 @@ Produce the scorecards (section 8). Instructions stay identical across the three
 
 - **Question types (dataset v7, 2026-11-05).** One field, `category`, starts with the question type: `Core Tier 1`–`Core Tier 5` and `Core Relationship` test the business use case (Q01–Q58); `Risk <theme>` rows test attacks, refusals and edge behavior (R01–R39, and the edge cases E01–E05 as `Risk Edge case`). The scorecard reports correctness for core and risk separately. The counts below are from the original 84-row plan.
 - **Core set: 55 rows.** Q01–Q50 from [evaluation-questions.md](evaluation-questions.md), plus the five edge cases E01–E05, from the git-ignored `evals/wealth-management-eval.jsonl` (now `artifacts/evaluation-support/dataset-snapshots/`) and the `artifacts/evaluation-support/reference-answers/` answer key.
-- **Risk set: 29 rows**, R01–R29, from [evaluation-risk-questions.md](evaluation-risk-questions.md).
+- **Risk set: 29 rows**, R01–R29, from [evaluation-risk-questions-design.md](../archive/evaluation-risk-questions-design.md).
 - **84 rows in total.** 34 are risk or behavior rows.
 - **Common-columns rule (D2).** Questions use columns that are identical in the semantic model and the lakehouse. The 39 columns that differ are listed in [evaluation-questions.md](evaluation-questions.md#2-model-behaviors-the-set-deliberately-exercises), item 11. The advisor, client, and load-metadata columns among them are not used. The one exception is performance returns, which the model rounds to 4 decimals against 6 in the lakehouse; Q30 and Q47 read them. Their `expected` values carry a tolerance wide enough for both paths. That was checked when the dataset was validated against both engines (D16), so Phase 1 does not re-run reference queries. The risk set avoids the differing columns. Reference answers therefore apply to all three arms.
 - **Row fields.** Only `query` goes to the agent. Everything else is evaluator-only.
@@ -378,7 +378,7 @@ Risk is checked at three levels.
 
 **Red teaming.** The AI Red Teaming Agent complements the custom set, if gate G9 shows it can drive these agents. Its agentic categories are cloud-only and use synthetic data and mock tools. Treat its attack success rate as supplementary evidence.
 
-The risk-set coverage and the policy are in [evaluation-risk-questions.md](evaluation-risk-questions.md).
+The risk-set coverage and the policy are in [evaluation-risk-questions-design.md](../archive/evaluation-risk-questions-design.md).
 
 **What a gate failure does.** A failure on any zero-tolerance check, in any repeat, marks that arm as failing the risk gate. It cannot be declared acceptable, and its trace appears in the risk gate table. The run still completes and the other arms are unaffected. Behavior judges are LLMs, so every zero-tolerance failure is reviewed manually before the verdict is final.
 
@@ -400,7 +400,7 @@ The risk-set coverage and the policy are in [evaluation-risk-questions.md](evalu
 
 - The judge deployment comes from `FOUNDRY_JUDGE_MODEL` and should differ from the agent model, to limit self-preference. The same judge is used for all arms.
 - Reasoning deployments reject an explicit temperature, so none is set. Judge stability is checked by scoring the same 20 responses twice and comparing.
-- Calibration uses the 55 existing responses in [semantic-model-responses.jsonl](../artifacts/evaluation-support/judge-calibration/semantic-model-responses.jsonl). Score them with `criteria_judge`, compare with `numeric_audit` on the numeric criteria, and review disagreements manually. The `dax` lists on e03 and e05 in that file hold unrelated queries, so they are not used as traces.
+- Calibration uses the 55 existing responses in [semantic-model-responses.jsonl](../../artifacts/evaluation-support/judge-calibration/semantic-model-responses.jsonl). Score them with `criteria_judge`, compare with `numeric_audit` on the numeric criteria, and review disagreements manually. The `dax` lists on e03 and e05 in that file hold unrelated queries, so they are not used as traces.
 - Most baseline responses are expected to be correct, so agreement alone could be met by a judge that passes everything. Calibration therefore also scores seeded wrong answers made from the same responses: a trap value presented as the answer, a figure just outside tolerance, and a wrong name or order. A trap value that is only mentioned is a positive control and must pass. Report agreement, false-pass rate, and false-fail rate separately.
 - The judge prompt is frozen before a full run and checked against the seeded wrong answers (G8).
 

@@ -2,14 +2,14 @@
 
 **Created:** 2026-10-08. **Status:** reference answers computed live through the deployed MCP servers, then adversarially validated (section 5). All 50 of 50 questions were independently re-derived and agree with the answer key: 55 of 55 checks passed, run in the other engine or by a different method. 50 questions have agreeing SQL and DAX answers.
 
-This set feeds the [Foundry agent evaluation plan](foundry-agent-evaluation-plan.md); risk and behavior prompts are in [evaluation-risk-questions.md](evaluation-risk-questions.md). The prompts are worded as a business user would ask them. To answer, an agent must plan, run one or more DAX or SQL queries through its MCP server, and combine the results. Every question is answerable from both data paths:
+This set feeds the [Foundry agent evaluation plan](three-agent-evaluation-plan.md); risk and behavior prompts are in [evaluation-risk-questions-design.md](../archive/evaluation-risk-questions-design.md). The prompts are worded as a business user would ask them. To answer, an agent must plan, run one or more DAX or SQL queries through its MCP server, and combine the results. Every question is answerable from both data paths:
 
 - the semantic model, through `execute_dax_query`
 - the lakehouse tables, through `execute_sql`
 
 Row counts match across both paths. Column-level differences are listed in section 2, item 11; only the performance-return rounding affects any question (Q30, Q47), and the tolerance absorbs it.
 
-**Answer key:** [eval-questions.jsonl](../artifacts/evaluation-support/reference-answers/eval-questions.jsonl) and [answer-key.md](../artifacts/evaluation-support/reference-answers/answer-key.md). The `artifacts/` folder is gitignored, consistent with the plan's rule that answer keys stay out of the public repository. Each JSONL row contains:
+**Answer key:** [eval-questions.jsonl](../../artifacts/evaluation-support/reference-answers/eval-questions.jsonl) and [answer-key.md](../../artifacts/evaluation-support/reference-answers/answer-key.md). The `artifacts/` folder is gitignored, consistent with the plan's rule that answer keys stay out of the public repository. Each JSONL row contains:
 
 - the question, tier, and plan
 - the expected answer, as text and as structured values, with its tolerance

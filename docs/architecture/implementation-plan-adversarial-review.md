@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-11  
 **Reviewed scope:** accuracy, completeness, architectural boundaries, Python 3.11 compatibility, Microsoft tool alignment, OSSIE adaptation, and evidence from the supplied PBIX.  
-**Disposition:** material design corrections applied to [implementation-plan.md](implementation-plan.md). **Conditionally ready for a feasibility implementation—not certified for live use or shared advisor deployment.**
+**Disposition:** material design corrections applied to [semantic-model-mcp-implementation-plan.md](semantic-model-mcp-implementation-plan.md). **Conditionally ready for a feasibility implementation—not certified for live use or shared advisor deployment.**
 
 > **Subsequent scope decision, 2026-09-11:** the user selected a trusted POC with **no inbound MCP authentication**, reuse of the PBIX IDs, MCAPS compute and associated Fabric hosting. This report retains the findings against the earlier multi-user design; its OAuth/OBO, individual caller-disclosure and two-user isolation gates now apply **only to a future authenticated multi-user expansion**, not to starting this POC. The current plan instead requires restricted ingress, a fixed POC exposure policy and one explicitly authenticated backend identity. Fabric/Power BI authentication and endpoint-specific RLS restrictions still apply. No model security is disabled, and all reachable clients share the same approved scope.
 
@@ -115,7 +115,7 @@ These are architectural design checks, **not certification against an external a
 9. **Generation eligibility:** correct Microsoft generation engine with required context and actual tenant/user eligibility; no claim when disabled.
 10. **Output/freshness bounds:** nested/partial errors, unknown types/completeness, actual byte/deadline enforcement and schema-versus-data staleness verified.
 
-The revised [implementation-plan.md](implementation-plan.md) carries these as explicit phase exits and acceptance checks. The existing [model-assessment.md](model-assessment.md) retains static findings with their evidence limits.
+The revised [semantic-model-mcp-implementation-plan.md](semantic-model-mcp-implementation-plan.md) carries these as explicit phase exits and acceptance checks. The existing [semantic-model-assessment.md](semantic-model-assessment.md) retains static findings with their evidence limits.
 
 ## 8. Key sources
 
@@ -127,4 +127,4 @@ The revised [implementation-plan.md](implementation-plan.md) carries these as ex
 - [Native relationship behavior](https://learn.microsoft.com/en-us/analysis-services/tmsl/relationships-object-tmsl), [inactive relationships/RLS](https://learn.microsoft.com/en-us/power-bi/guidance/relationships-active-inactive), and [DAX query definitions](https://learn.microsoft.com/en-us/dax/dax-queries).
 - [Execute Queries REST](https://learn.microsoft.com/en-us/rest/api/power-bi/datasets/execute-queries), [report binding REST](https://learn.microsoft.com/en-us/rest/api/power-bi/reports/get-report-in-group), and [closed-schema extension rules](https://json-schema.org/understanding-json-schema/reference/object#extending-closed-schemas).
 
-The full source register is in [implementation-plan.md](implementation-plan.md). Public documentation checks are not authenticated endpoint observations. Reference traversal was task-focused, not an unlimited crawl of every transitive link.
+The full source register is in [semantic-model-mcp-implementation-plan.md](semantic-model-mcp-implementation-plan.md). Public documentation checks are not authenticated endpoint observations. Reference traversal was task-focused, not an unlimited crawl of every transitive link.

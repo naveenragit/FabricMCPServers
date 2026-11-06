@@ -1,45 +1,83 @@
-# Wealth Management Semantic Model MCP
+# Fabric Semantic Model MCP
 
-Development workspace for a read-only MCP façade over a Power BI semantic model with Apache OSSIE-aligned metadata.
+Read-only MCP servers over one wealth-management dataset in Microsoft Fabric, and the harness that evaluates three Foundry agents built on them: one querying the semantic model with DAX, one querying the lakehouse tables with SQL, and one asking a Fabric data agent.
 
 > **Identifiers in this repository are placeholders.** Tenant, subscription, workspace,
 > semantic model, report, capacity, and managed identity IDs have been replaced with
 > non-functional values such as `<workspace-id>`, and the App Service
-> name with `<app-name>`. Substitute your own before deploying — see
+> name with `<app-name>`. Substitute your own before deploying; see
 > [servers/powerbi-semantic-model-mcp/docs/azure-deployment.md](servers/powerbi-semantic-model-mcp/docs/azure-deployment.md).
 >
 > The source `.pbix` is deliberately **not** published; it stays git-ignored. Regenerate the
 > catalog from your own model with `scripts/model-inspection/inspect_pbix.py` and the `export` command.
 
-## Deliverables
+## Project map
 
-- **[servers/powerbi-semantic-model-mcp/README.md](servers/powerbi-semantic-model-mcp/README.md)** — implemented Python package, local preview, verification results and live-integration steps.
-- **[docs/implementation-plan.md](docs/implementation-plan.md)** — architecture, OSSIE/DAX compatibility, MCP tool contracts, naming, folder structure, authentication, phased backlog, and acceptance criteria.
-- **[docs/foundry-agent-evaluation-plan.md](docs/foundry-agent-evaluation-plan.md)** — Foundry agent evaluation plan: three agents (semantic model, lakehouse tables, Fabric data agent), evaluation criteria for agentic capability, response quality, and risk, and the phased delivery plan. Awaiting review. Supersedes [docs/foundry-evaluation-plan.md](docs/foundry-evaluation-plan.md).
-- **[docs/evaluation-risk-questions.md](docs/evaluation-risk-questions.md)** — 29 added risk and behavior prompts and the agent policy they test.
-- **[docs/model-assessment.md](docs/model-assessment.md)** — findings from the actual PBIX, including relationship, RLS, measure, report, and AI-metadata observations.
-- **[docs/adversarial-review.md](docs/adversarial-review.md)** — source-backed review findings, corrections, evidence checks, and unresolved implementation gates.
-- [scripts/model-inspection/inspect_pbix.py](scripts/model-inspection/inspect_pbix.py) — reproducible offline metadata-only inspection utility.
-- [scripts/diagnostics/probe_effective_username_mcp.py](scripts/diagnostics/probe_effective_username_mcp.py) — constant-result MCP probe for the `effectiveUsername` Read versus Build permission matrix.
-- [requirements-inspection.txt](requirements-inspection.txt) — pinned inspection dependency; not proposed server runtime dependencies.
+```text
+servers/                              MCP servers, one installable Python package each
+  powerbi-semantic-model-mcp/         semantic model schema + DAX (package wealth_management_mcp)
+  onelake-sql-mcp/                    lakehouse schema + read-only T-SQL (package onelake_tables_mcp)
+  fabric-data-agent-proxy-mcp/        pass-through proxy to a Fabric data agent (package fabric_dataagent_mcp)
+evaluation/
+  harness/                            run records, recorder, evaluators, Foundry agents (package foundry_eval)
+  datasets/                           README tracked; the benchmark dataset itself is git-ignored
+scripts/
+  model-inspection/                   PBIX metadata inspection, RLS scan
+  agent-management/                   create, show, probe, and smoke-test the Foundry agents
+  evaluation/                         run a benchmark, score runs, validate the dataset, R12 stub, load test
+  reporting/                          scorecard and HTML report from stored runs
+  diagnostics/                        smoke tests and probes against deployed servers
+  access-management/                  changes database permissions; run only deliberately
+docs/
+  architecture/                       semantic model MCP design, model assessment, design review
+  evaluation/                         three-agent evaluation plan, question set
+  archive/                            superseded designs, kept for history
+artifacts/                            git-ignored: catalogs, runs, benchmarks, reports, reference answers
+```
 
-## Current status
+| Component | Start here |
+|---|---|
+| Semantic model MCP server | [servers/powerbi-semantic-model-mcp/README.md](servers/powerbi-semantic-model-mcp/README.md) |
+| Evaluation design and method | [docs/evaluation/three-agent-evaluation-plan.md](docs/evaluation/three-agent-evaluation-plan.md) |
+| Evaluation dataset | [evaluation/datasets/README.md](evaluation/datasets/README.md) |
+| Question set and traps | [docs/evaluation/evaluation-questions.md](docs/evaluation/evaluation-questions.md) |
+| Semantic model MCP design | [docs/architecture/semantic-model-mcp-implementation-plan.md](docs/architecture/semantic-model-mcp-implementation-plan.md) |
+| Findings from the PBIX | [docs/architecture/semantic-model-assessment.md](docs/architecture/semantic-model-assessment.md) |
+| This layout and its cleanup | [docs/project-structure-and-artifact-cleanup-plan.md](docs/project-structure-and-artifact-cleanup-plan.md) |
 
-The Python package is implemented under **[semantic-model-mcp](servers/powerbi-semantic-model-mcp/README.md)**. Offline generation/validation and MCP stdio/HTTP resources work; pytest, Ruff, and mypy pass, and the wheel's bundled schema resources were verified outside the source folder. The actual catalog preserves **15 tables, 171 columns, 54 measures, 37 relationships** (model update 2026-11-05).
+Inside `artifacts/` (git-ignored), each major evaluation batch has a folder under `artifacts/benchmarks/` holding its logs, scorecard, metrics, reports, and an `experiment.json` listing its runs; `artifacts/benchmarks/README.md` maps batch names to folders. Raw run records stay in `artifacts/runs/<run_id>/`, where the harness reads them. Dataset snapshots, reference answers, and judge calibration are under `artifacts/evaluation-support/`.
 
-The project-owned `fabric_rest` backend is deployed and has executed live DAX through the Arrow-returning `executeDaxQueries` endpoint. Microsoft's native preview MCP endpoint remains blocked by its disabled tenant setting, so the `remote_mcp` mode still exposes zero invented Microsoft tools. Version **0.2.0** adds a disabled-by-default, allowlisted operator probe for testing the `effectiveUsername` Read versus Build requirement; it does not add per-caller identity propagation.
+## Common commands
 
-**Confirmed scope:** no MCP client authentication for this POC; host on restricted/private Azure compute in the user's MCAPS tenant and reuse the PBIX workspace/model/report IDs against the associated Fabric environment. All reachable clients share one configured backend identity and approved POC data scope. Fabric/Power BI still requires backend credentials; no per-caller advisor isolation is claimed.
+Run from the repository root with the repository virtual environment.
 
-Recommended design: **Trusted POC client → Python 3.11 MCP façade on MCAPS compute → authenticated Power BI backend → published Fabric semantic model**. Microsoft's remote MCP adapter is the preferred capability provider if backend access/contracts are proved; it is not mandated by the documentation.
+```powershell
+# Tests, one package at a time (test module names collide across packages)
+.\.venv\Scripts\python.exe -m pytest servers/powerbi-semantic-model-mcp/tests -q
+.\.venv\Scripts\python.exe -m pytest servers/onelake-sql-mcp/tests -q
+.\.venv\Scripts\python.exe -m pytest evaluation/harness/tests -q
+Push-Location servers/fabric-data-agent-proxy-mcp; ..\..\.venv\Scripts\python.exe -m pytest tests -q; Pop-Location
 
-**Standards boundary:** the public surface follows Microsoft's **Execute Query, Get Semantic Model Schema, Get Report Metadata, and Generate Query** roles. Exact wire names/input schemas require discovery; no custom metric tools replace them. Semantic definitions use an explicitly versioned **OSSIE-derived Fabric/DAX Profile 1.0.0**, retaining first-class DAX metrics and all relationships with active/inactive state. This intentionally adapted schema is not unmodified OSSIE or a proven drop-in replacement for Microsoft's endpoint.
+# Semantic model MCP server, offline over stdio
+.\.venv\Scripts\python.exe -m wealth_management_mcp serve --catalog artifacts/wealth-management-catalog.json --transport stdio
 
-The plan uses the official MCP Python SDK v2, Pydantic models, ASGI/Uvicorn HTTP hosting, and pytest/Ruff/mypy in one installable Python package. Python 3.11 is required for the server, metadata utilities, and tests; no .NET application or runtime is required. Local Desktop DAX execution is deferred rather than introducing a managed-runtime bridge.
+# Evaluation: validate the dataset, run the three agents, score, then report
+.\.venv\Scripts\python.exe scripts\evaluation\validate_evaluation_dataset.py
+.\.venv\Scripts\python.exe scripts\evaluation\run_agent_benchmark.py --arms dax sql fabric --repeats 3 --batch <batch>
+.\.venv\Scripts\python.exe scripts\evaluation\score_recorded_runs.py <run_id> [<run_id> ...]
+.\.venv\Scripts\python.exe scripts\reporting\build_benchmark_scorecard.py <run_ids> --out artifacts\benchmarks\<folder>\scorecard\<batch>.md --export artifacts\benchmarks\<folder>\metrics
+.\.venv\Scripts\python.exe scripts\reporting\build_benchmark_report.py <dax_run> <sql_run> <fabric_run> --name <batch> --out artifacts\benchmarks\<folder>\reports\<batch>-report.html
+```
 
-POC checks cover backend credentials from compute, reused model/report binding, fixed metadata exposure and restricted ingress. Inbound OAuth/JWT/OBO and two-user RLS/OLS tests are **deferred**, not initial implementation blockers. Existing model security is not removed; REST service-principal execution is not an automatic option for this RLS-containing model. Completeness and imported-data freshness remain explicit unknowns where evidence is missing.
+The Fabric data agent arm needs the proxy running locally and reachable through a dev tunnel (`servers\fabric-data-agent-proxy-mcp\scripts\serve-local.ps1`, then host the tunnel). The R12 prompt-injection row also needs `scripts\evaluation\serve_stubs.py`. The other two servers run on Azure App Service; their packaging scripts are in each server's `scripts/` folder.
 
-The plan records the current Azure CLI default **`<subscription-name>`** as a deployment candidate. A second user MCAPS environment is also available, so the exact subscription/compute must be confirmed before deployment. Azure CLI and VS Code Azure extension authentication are separate; the extension was signed out while CLI account metadata was available. No account selection or cloud resources were changed.
+## Status
+
+- The semantic model server's project-owned `fabric_rest` backend is deployed and runs live DAX through `executeDaxQueries`. The catalog holds **15 tables, 171 columns, 54 measures, 37 relationships** (model update 2026-11-05). Microsoft's preview Power BI MCP endpoint stays blocked by a disabled tenant setting, so the `remote_mcp` mode exposes no invented Microsoft tools.
+- The lakehouse server is deployed on the same App Service plan. The data agent proxy runs locally as the signed-in user, because the data agent does not accept managed identities.
+- **Scope:** no inbound MCP authentication (accepted for this POC); all clients share each server's backend identity, and no per-caller row-level isolation is claimed. Do not use real client data.
+- The Python package design (official MCP Python SDK v2, Pydantic, ASGI/Uvicorn, pytest/Ruff/mypy on Python 3.11) and the OSSIE-derived Fabric/DAX semantic profile are described in the [design document](docs/architecture/semantic-model-mcp-implementation-plan.md). The semantic profile is intentionally adapted; it is not unmodified OSSIE or a drop-in replacement for Microsoft's endpoint.
+- Evaluation results are kept out of the repository, under `artifacts/benchmarks/`.
 
 ## Local inspection environment
 
