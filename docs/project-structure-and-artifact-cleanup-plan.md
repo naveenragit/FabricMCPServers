@@ -255,14 +255,25 @@ What Phase 0 established:
 - The stored `full-3` scorecard predates the current scorecard sections, so later gates compare against the regenerated baseline, not the stored file.
 - Running the scorecard and report builder did not change any protected file: all 144 hashes were checked again afterwards.
 
-Phase A: no command or import paths change
+Phase A: no command or import paths change - done 2026-11-06
 
-- [ ] Remove the workflow; no required checks depend on it. Commit.
-- [ ] Move results text out of tracked documentation into the ignored results history. Commit.
-- [ ] Group reports, scorecards, metrics, logs, and analysis captures into experiment folders, leaving run directories in place. Archive non-major material and dated metadata backups.
-- [ ] Move the evaluation-support files, and update `calibrate_judge.py` paths in the same change.
-- [ ] Remove the approved caches and packaging output.
-- [ ] Gate: the protected inventory matches, and the `full-4` scorecard regenerated to scratch matches the baseline. Commit any tracked changes.
+- [x] Remove the workflow; no required checks depend on it. Commit.
+- [x] Move results text out of tracked documentation into the ignored results history. Commit.
+- [x] Group reports, scorecards, metrics, logs, and analysis captures into experiment folders, leaving run directories in place. Archive non-major material and dated metadata backups.
+- [x] Move the evaluation-support files, and update `calibrate_judge.py` paths in the same change.
+- [x] Remove the approved caches and packaging output.
+- [x] Gate: the protected inventory matches, and the `full-4` scorecard regenerated to scratch matches the baseline. Commit any tracked changes.
+
+What Phase A did:
+
+- Workflow: removed, and `docs/implementation-plan.md` now describes local verification in place of CI.
+- Results: the Phase 0 findings, pilot, full runs 1 and 2, end-to-end tests, and G8 figures moved unchanged to the ignored `artifacts/benchmarks/results-history.md`. The tracked plan keeps the method, the decisions, and pointers, and contains no run IDs or score figures. Earlier commits on GitHub still contain the old text.
+- Files moved: 180 ignored files, by `phase_a_move.py` in the baseline folder. Each file's hash was checked before and after its move. `moves-log.csv` records every move and can reverse it with `--undo`.
+- Layout: each major batch's outputs are in `artifacts/benchmarks/<date>-<batch>-<description>/`, alongside an `experiment.json` listing its final and superseded runs and its dataset snapshot. `artifacts/benchmarks/README.md` maps old batch names to folders. Run directories did not move.
+- Evaluation support: dataset snapshots, reference answers, and judge calibration are in `artifacts/evaluation-support/`. `calibrate_judge.py` and four tracked doc links were updated in the same commit.
+- Cleanup: 25 cache, staging, and dist folders and 2 deployment ZIPs were removed. All were untracked and are recreated by the tools and build scripts.
+- Gate: all 144 protected files match their Phase 0 hashes, and the regenerated `full-4` scorecard, metrics, and report and the `full-3` scorecard and metrics match the baseline.
+- Left for Phase B, because these files move or are renamed there: default output paths and help text naming old artifact folders in `run_eval.py` (closing hint), `scorecard.py` (help), `build_report.py` (help and report footer), `check_model_rls.py` (scan output), and `foundry_smoke_agents.py` (docstring). None of them is an input, so nothing breaks. Changing the report footer changes report output, so the gate baseline is then refreshed for that one line.
 
 Phase B: code-touching moves, one small step at a time
 
