@@ -42,7 +42,7 @@ def main() -> int:
     parser.add_argument("run_ids", nargs="+")
     parser.add_argument("--out")
     parser.add_argument("--export", help="directory for CSVs of every metric, e.g. artifacts/metrics/<name>")
-    parser.add_argument("--dataset", default=str(ROOT / "evals" / "eval-dataset.jsonl"))
+    parser.add_argument("--dataset", default=str(ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"))
     args = parser.parse_args()
     tables = load_tables(ROOT / "artifacts" / "runs", args.run_ids)
     dataset = Path(args.dataset)

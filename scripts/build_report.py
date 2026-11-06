@@ -880,7 +880,7 @@ def main() -> int:
     parser.add_argument("run_ids", nargs=3, help="dax, sql and fabric run ids")
     parser.add_argument("--out", required=True)
     parser.add_argument("--name", required=True, help="batch name shown in the report, e.g. full-4")
-    parser.add_argument("--dataset", default=str(ROOT / "evals" / "eval-dataset.jsonl"), help="the dataset copy the runs used")
+    parser.add_argument("--dataset", default=str(ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"), help="the dataset copy the runs used")
     parser.add_argument("--note", action="append", default=[], help="extra limitation to list in the report; repeatable")
     parser.add_argument("--concurrency-test", help="artifacts/concurrency/<batch> folder; default: the newest one")
     args = parser.parse_args()

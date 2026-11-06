@@ -270,7 +270,7 @@ def main() -> int:
         args.arms, args.repeats, args.batch = list(resumed), first.repeats, first.batch_id
         args.scoring = first.environment.get("scoring", "judge")
     args.repeats = args.repeats or int(os.environ.get("EVAL_REPEATS", "3"))
-    dataset = ROOT / "evals" / "eval-dataset.jsonl"
+    dataset = ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"
     rows = load_dataset(dataset)
     if args.ids:
         wanted = {i.strip().upper() for i in args.ids.split(",")}

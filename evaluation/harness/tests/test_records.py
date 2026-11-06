@@ -335,5 +335,5 @@ def test_schema_files_cover_every_table_and_match_the_committed_copies(tmp_path)
     committed = Path(__file__).parents[1] / "schemas"
     for path in paths:
         assert (committed / path.name).read_text(encoding="utf-8") == path.read_text(encoding="utf-8"), (
-            "schema drift: run `python -m foundry_eval schemas foundry-eval/schemas`"
+            "schema drift: run `python -m foundry_eval schemas evaluation/harness/schemas`"
         )

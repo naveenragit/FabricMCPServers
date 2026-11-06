@@ -134,7 +134,7 @@ def main() -> int:
     parser.add_argument("--effort", default=None)
     args = parser.parse_args()
     load_env()
-    rows = {r.id: r for r in load_dataset(ROOT / "evals" / "eval-dataset.jsonl")}
+    rows = {r.id: r for r in load_dataset(ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl")}
     baseline = {}
     for line in (ROOT / "artifacts" / "evaluation-support" / "judge-calibration" / "semantic-model-responses.jsonl").read_text(encoding="utf-8").splitlines():
         item = json.loads(line)

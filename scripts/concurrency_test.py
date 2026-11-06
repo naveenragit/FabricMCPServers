@@ -140,7 +140,7 @@ def main() -> int:
     if "sql" in args.arms:
         run_eval.preflight_sql()
     wanted = [i.strip().upper() for i in args.ids.split(",") if i.strip()]
-    by_id = {r.id: r for r in load_dataset(ROOT / "evals" / "eval-dataset.jsonl")}
+    by_id = {r.id: r for r in load_dataset(ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl")}
     rows = [by_id[i] for i in wanted]
     config = config_from_env(os.environ)
     project = AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=AzureCliCredential())

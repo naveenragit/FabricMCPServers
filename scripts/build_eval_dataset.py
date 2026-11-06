@@ -1,4 +1,4 @@
-"""Validate the canonical evals/eval-dataset.jsonl without regenerating it from legacy sources.
+"""Validate the canonical evaluation/datasets/wealth-management-benchmark.jsonl without regenerating it from legacy sources.
 
 Run: .\.venv\Scripts\python.exe scripts\build_eval_dataset.py
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 from foundry_eval.dataset import dataset_sha256, load_dataset
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "evals" / "eval-dataset.jsonl"
+OUT = ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"
 
 
 def main() -> int:

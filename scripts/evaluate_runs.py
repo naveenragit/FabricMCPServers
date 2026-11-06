@@ -50,7 +50,7 @@ def main() -> int:
     parser.add_argument("--cloud-batch", type=int, default=5, help="responses per cloud eval run")
     parser.add_argument("--cloud-workers", type=int, default=5, help="cloud eval runs in flight at once")
     parser.add_argument("--scoring", choices=SCORING_MODES, default="judge", help="deterministic: no LLM judge")
-    parser.add_argument("--dataset", default=str(ROOT / "evals" / "eval-dataset.jsonl"))
+    parser.add_argument("--dataset", default=str(ROOT / "evaluation" / "datasets" / "wealth-management-benchmark.jsonl"))
     args = parser.parse_args()
 
     load_env()

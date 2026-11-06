@@ -2,7 +2,7 @@
 
 ## Canonical Source
 
-[eval-dataset.jsonl](eval-dataset.jsonl) is the authoritative dataset for all three arms: DAX semantic model, SQL lakehouse, and Fabric data agent. Edit prompts, reference answers, criteria, and expected behavior here, not in an arm-specific copy or the historical Markdown tables.
+[wealth-management-benchmark.jsonl](wealth-management-benchmark.jsonl) is the authoritative dataset for all three arms: DAX semantic model, SQL lakehouse, and Fabric data agent. Edit prompts, reference answers, criteria, and expected behavior here, not in an arm-specific copy or the historical Markdown tables.
 
 Dataset revision: **v7, 2026-11-05**. It contains **102 rows**:
 
@@ -40,11 +40,11 @@ R12 still requires the existing injection stub. It tests the outer Foundry agent
 
 This is not a claim that every LLM risk is covered. Supply-chain integrity, training/data poisoning, downstream output execution, vector retrieval isolation, authenticated per-user boundaries, multi-turn cumulative extraction, and broader harmful-content/protected-material tests require separate fixtures, integration checks, approved safety datasets, or an applicability decision. They were not added as misleading live-data questions.
 
-Scorer fixes from [the review](../artifacts/evaluation-support/evaluation-question-review.md) are in place: `named_row_cap` v2 counts names-only tables, lists, prose, CSV, and JSON records; `criteria_judge` v3 does not auto-pass a figure that is negated or competes with another plausible value; and the scorecard applies a per-attempt safety gate (safety checks on every row, the behavior verdict on `gate=zero` rows; undecided is `pending`, never passed). `checks` labels describe intended evidence only; the scorecard lists every listed check that produced no result. `--scoring deterministic` (in `run_eval.py` and `evaluate_runs.py`) uses no LLM judge: code-decidable criteria are settled and the rest are `needs_review`.
+Scorer fixes from [the review](../../artifacts/evaluation-support/evaluation-question-review.md) are in place: `named_row_cap` v2 counts names-only tables, lists, prose, CSV, and JSON records; `criteria_judge` v3 does not auto-pass a figure that is negated or competes with another plausible value; and the scorecard applies a per-attempt safety gate (safety checks on every row, the behavior verdict on `gate=zero` rows; undecided is `pending`, never passed). `checks` labels describe intended evidence only; the scorecard lists every listed check that produced no result. `--scoring deterministic` (in `run_eval.py` and `evaluate_runs.py`) uses no LLM judge: code-decidable criteria are settled and the rest are `needs_review`.
 
 ## Historical Evidence
 
-The exact 84-row dataset used by `full-3` is preserved at [the historical snapshot](../artifacts/evaluation-support/dataset-snapshots/eval-dataset-full-3-188f3b1ff3a38638.jsonl), SHA-256:
+The exact 84-row dataset used by `full-3` is preserved at [the historical snapshot](../../artifacts/evaluation-support/dataset-snapshots/eval-dataset-full-3-188f3b1ff3a38638.jsonl), SHA-256:
 
 ```text
 188f3b1ff3a38638aaadfc79c0472828f70e05c108f8d1681c761ce699ce643d

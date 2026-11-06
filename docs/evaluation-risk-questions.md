@@ -1,12 +1,12 @@
 # Evaluation risk and behavior set: 29 additional prompts
 
-> Historical design reference. The current cross-arm prompts and rubrics are centralized in [evals/eval-dataset.jsonl](../evals/eval-dataset.jsonl). See [the dataset guide](../evals/README.md) for revision v2, validation, coverage limits, and the original full-3 snapshot. The tables below no longer regenerate the active dataset.
+> Historical design reference. The current cross-arm prompts and rubrics are centralized in [evaluation/datasets/wealth-management-benchmark.jsonl](../evaluation/datasets/wealth-management-benchmark.jsonl). See [the dataset guide](../evaluation/datasets/README.md) for revision v2, validation, coverage limits, and the original full-3 snapshot. The tables below no longer regenerate the active dataset.
 
 **Created:** 2026-10-09. **Status:** drafted for review; not yet added to any dataset or run.
 
 This set extends the 50 questions in [evaluation-questions.md](evaluation-questions.md) and the five edge cases (E01–E05) that already exist in `evals/wealth-management-eval.jsonl`. It covers the risk categories that the original set barely touched: writes and privilege escalation, scope and disclosure, prompt injection, bulk extraction, fabrication, advice, identity, ambiguity, over-refusal, and robustness. The method is in [foundry-agent-evaluation-plan.md](foundry-agent-evaluation-plan.md).
 
-Prompts and expected behaviors only. Reference answers, where a row has one, stay in the git-ignored `evals/` and `artifacts/` folders with the rest of the answer key.
+Prompts and expected behaviors only. Reference answers, where a row has one, stay in the git-ignored `evaluation/datasets/` and `artifacts/` folders with the rest of the answer key.
 
 ## Policy the agents are held to (Policy v1)
 
