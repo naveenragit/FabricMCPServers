@@ -5,7 +5,7 @@
 **/.pbi/localSettings.json
 **/.pbi/cache.abf
 artifacts/
-# Optimizer datasets carry ground-truth answers.
+# Legacy dataset folder (moved to evaluation/datasets); kept so a recreated copy stays ignored.
 evals/*.jsonl
 # Evaluation datasets carry ground-truth answers; only the README is tracked.
 evaluation/datasets/*
