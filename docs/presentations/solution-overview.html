@@ -172,7 +172,7 @@ pre.snippet .k { color: var(--cp-accent); }
 .lane .box.focus { border-color: var(--cp-accent); box-shadow: 0 0 0 1px var(--cp-accent); }
 .lane .box small { display: block; color: var(--cp-text-soft); font-size: 12px; }
 .lane .box.dim { color: var(--cp-text-muted); }
-.agenda { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; }
+.agenda { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 36px; }
 .agenda .card { display: flex; gap: 12px; align-items: flex-start; }
 .agenda .num { font-size: 28px; font-weight: 600; color: var(--cp-accent); line-height: 1; }
 .agenda b { font-size: 15px; }
@@ -211,6 +211,32 @@ table.tiers td.n { text-align: right; font-weight: 600; color: var(--cp-accent);
 table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
 .tier-name { font-weight: 600; white-space: nowrap; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* eval run slide */
+.pipe { display: grid; grid-template-columns: 1fr 18px 1fr 18px 1fr 18px 1fr 18px 1fr; align-items: stretch; margin-bottom: 18px; }
+.pipe .to { display: grid; place-items: center; color: var(--cp-border-strong); font-size: 16px; }
+.stage { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
+.stage.focus { border-color: var(--cp-accent); box-shadow: 0 0 0 1px var(--cp-accent); }
+.stage h4 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.stage h4 i { font-style: normal; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--cp-accent); color: var(--cp-accent-fg); }
+.stage p { font-size: 12.5px; line-height: 1.4; color: var(--cp-text-muted); }
+.stage .chip { align-self: flex-start; margin-top: auto; font-family: Consolas, "Courier New", Courier, monospace; font-size: 11px; }
+.seq .actor rect { fill: var(--cp-surface); stroke: var(--cp-border-strong); }
+.seq .actor text { fill: var(--cp-text); font-size: 13px; font-weight: 600; text-anchor: middle; font-family: "Segoe UI", Aptos, Calibri, sans-serif; }
+.seq .life { stroke: var(--cp-border-strong); stroke-dasharray: 3 4; }
+.seq .msg { stroke: var(--cp-text-muted); stroke-width: 1.5; }
+.seq .ret { stroke-dasharray: 5 4; }
+.seq .hot { stroke: var(--cp-accent); }
+.seq .head { fill: var(--cp-text-muted); }
+.seq .head.hot { fill: var(--cp-accent); stroke: none; }
+.seq .lbl { fill: var(--cp-text); font-size: 11.5px; text-anchor: middle; font-family: Consolas, "Courier New", Courier, monospace; }
+.seq .lbl.soft { fill: var(--cp-text-muted); }
+.io { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.io .box { background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 0.625rem; padding: 8px 10px; font-size: 12.5px; line-height: 1.45; }
+.io .box b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cp-text-soft); margin-bottom: 2px; }
+.evals { display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; font-size: 13px; line-height: 1.35; align-items: baseline; }
+.evals .chip { justify-self: start; }
+.evals b span { font-weight: 400; color: var(--cp-text-muted); }
 .stat { background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 0.625rem; }
 .stat b { color: var(--cp-accent); line-height: 1.1; }
 .stat span { color: var(--cp-text-muted); }
@@ -257,6 +283,7 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
     <div class="card"><div class="num">1</div><div><b>Semantic Model MCP</b><p class="small">Tools, guards, and the OSSIE-derived schema catalog</p></div></div>
     <div class="card"><div class="num">2</div><div><b>OneLake SQL MCP</b><p class="small">Tools, read-only SQL guard, live INFORMATION_SCHEMA</p></div></div>
     <div class="card"><div class="num">3</div><div><b>Evaluation dataset</b><p class="small">102 prompts, five tiers plus risk themes, and how answers are scored</p></div></div>
+    <div class="card"><div class="num">4</div><div><b>Evaluation run</b><p class="small">How one question becomes a recorded, scored answer</p></div></div>
   </div>
   <p class="hero-note">All three servers are Python 3.11 MCP servers over streamable HTTP. The DAX and SQL servers run on Azure App Service with a managed identity; the Data Agent proxy runs as the signed-in user behind a dev tunnel.</p>
 
@@ -455,6 +482,98 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
     <div class="cell"><b>Answers</b>Reference answers stay local, out of git</div>
   </div>
   <div class="ft" style="margin-top:0"><span>Evaluation dataset and methods</span><div class="nav"></div></div>
+</section>
+
+<!-- 5. Evaluation run -->
+<section class="slide" data-title="Evaluation run">
+  <div class="hd">
+    <div>
+      <div class="kicker">Benchmark &middot; one attempt, end to end</div>
+      <h2>How an evaluation run works</h2>
+      <p class="lede">The harness asks a Foundry agent the question, records everything it did, then scores the final answer.</p>
+    </div>
+    <code class="path">scripts/evaluation/run_agent_benchmark.py</code>
+  </div>
+
+  <div class="pipe">
+    <div class="stage"><h4><i>1</i>Question</h4><p>Only the prompt text is sent. The reference answer and criteria stay with the harness.</p><span class="chip">dataset row</span></div>
+    <div class="to">&rarr;</div>
+    <div class="stage focus"><h4><i>2</i>Agent</h4><p>Foundry prompt agent: gpt-6-luna, Policy v1 instructions, one MCP connection.</p><span class="chip">wm-dax / sql / fabric</span></div>
+    <div class="to">&rarr;</div>
+    <div class="stage focus"><h4><i>3</i>MCP tools</h4><p>Reads the schema, writes DAX or SQL, runs it. The server queries Fabric.</p><span class="chip">schema &rarr; query</span></div>
+    <div class="to">&rarr;</div>
+    <div class="stage"><h4><i>4</i>Record</h4><p>Tool calls, queries, results, final answer, tokens and time are saved.</p><span class="chip">artifacts/runs/&lt;run&gt;/</span></div>
+    <div class="to">&rarr;</div>
+    <div class="stage"><h4><i>5</i>Score</h4><p>The final answer is checked against the held-back reference and criteria.</p><span class="chip">code + LLM judge</span></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 28px">
+    <div class="stack" style="gap:8px">
+      <div class="sec-title">Inside one attempt (DAX and SQL arms)</div>
+      <div class="card" style="padding:10px 12px">
+        <svg class="seq" viewBox="0 0 600 232" width="100%" height="232" role="img" aria-label="Sequence of calls in one attempt">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+            <marker id="ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head hot" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <g class="actor"><rect x="10" y="2" width="110" height="28" rx="8"/><text x="65" y="21">Harness</text></g>
+          <g class="actor"><rect x="170" y="2" width="120" height="28" rx="8"/><text x="230" y="21">Foundry agent</text></g>
+          <g class="actor"><rect x="340" y="2" width="110" height="28" rx="8"/><text x="395" y="21">MCP server</text></g>
+          <g class="actor"><rect x="490" y="2" width="100" height="28" rx="8"/><text x="540" y="21">Fabric</text></g>
+          <line class="life" x1="65" y1="30" x2="65" y2="230"/>
+          <line class="life" x1="230" y1="30" x2="230" y2="230"/>
+          <line class="life" x1="395" y1="30" x2="395" y2="230"/>
+          <line class="life" x1="540" y1="30" x2="540" y2="230"/>
+
+          <line class="msg hot" x1="65" y1="56" x2="228" y2="56" marker-end="url(#ah-hot)"/>
+          <text class="lbl" x="147" y="50">question</text>
+          <line class="msg" x1="230" y1="82" x2="393" y2="82" marker-end="url(#ah)"/>
+          <text class="lbl" x="312" y="76">schema tool</text>
+          <line class="msg" x1="395" y1="100" x2="538" y2="100" marker-end="url(#ah)"/>
+          <text class="lbl soft" x="467" y="94">metadata</text>
+          <line class="msg ret" x1="395" y1="120" x2="232" y2="120" marker-end="url(#ah)"/>
+          <text class="lbl soft" x="312" y="114">tables, columns</text>
+          <line class="msg" x1="230" y1="148" x2="393" y2="148" marker-end="url(#ah)"/>
+          <text class="lbl" x="312" y="142">query tool (DAX/SQL)</text>
+          <line class="msg" x1="395" y1="166" x2="538" y2="166" marker-end="url(#ah)"/>
+          <text class="lbl soft" x="467" y="160">run query</text>
+          <line class="msg ret" x1="395" y1="186" x2="232" y2="186" marker-end="url(#ah)"/>
+          <text class="lbl soft" x="312" y="180">rows</text>
+          <line class="msg ret hot" x1="230" y1="214" x2="67" y2="214" marker-end="url(#ah-hot)"/>
+          <text class="lbl" x="147" y="208">final answer</text>
+        </svg>
+      </div>
+      <p class="small">Fabric arm: one call to <code class="inl">ask_fabric_data_agent</code>; the Data Agent writes and runs its own query.</p>
+    </div>
+
+    <div class="stack" style="gap:8px">
+      <div class="sec-title">How the answer is scored</div>
+      <div class="io">
+        <div class="box"><b>From the dataset</b>Reference answer, criteria, expected figures</div>
+        <div class="box"><b>From the attempt</b>Final answer, tool calls and their outputs</div>
+      </div>
+      <div class="card" style="padding:12px 14px">
+        <div class="evals">
+          <span class="chip accent">code</span><b>Numbers check<span>: settles figures that match within tolerance</span></b>
+          <span class="chip accent">LLM judge</span><b>Criteria judge<span>: grades the rest, quoting the answer</span></b>
+          <span class="chip accent">code</span><b>Safety checks<span>: five zero-tolerance gates</span></b>
+          <span class="chip accent">LLM judge</span><b>Behavior judge<span>: risk prompts, against Policy v1</span></b>
+        </div>
+      </div>
+      <div class="io">
+        <div class="box"><b>Result</b>Correct = every criterion met</div>
+        <div class="box"><b>Gate</b>Pass, fail, or pending (never assumed)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="strip" style="margin-top:auto">
+    <div class="cell"><b>Parallel</b>Each arm has its own worker pool; slowest prompts start first</div>
+    <div class="cell"><b>Retries</b>Rate limits and outages are retried and left out of scores</div>
+    <div class="cell"><b>Traces</b>Foundry spans add tokens and tool time per attempt</div>
+    <div class="cell"><b>Output</b>Scorecard and HTML report per batch</div>
+  </div>
+  <div class="ft" style="margin-top:0"><span>Evaluation run</span><div class="nav"></div></div>
 </section>
 
 <script>
