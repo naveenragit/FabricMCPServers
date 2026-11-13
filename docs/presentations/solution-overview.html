@@ -194,6 +194,22 @@ pre.snippet .k { color: var(--cp-accent); }
 .agenda .num { font-size: 28px; font-weight: 600; color: var(--cp-accent); line-height: 1; }
 .agenda b { font-size: 15px; }
 
+/* slide 2: horizontal flow and key/value facts */
+.hflow { display: grid; grid-template-columns: 1fr 22px 1fr 22px 1fr; align-items: stretch; }
+.hflow .node { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 0.625rem; padding: 10px 12px; text-align: center; }
+.hflow .node.focus { border-color: var(--cp-accent); box-shadow: 0 0 0 1px var(--cp-accent); }
+.hflow .node b { display: block; font-size: 14px; }
+.hflow .node span { font-size: 11.5px; color: var(--cp-text-soft); }
+.hflow .to { display: grid; place-items: center; color: var(--cp-border-strong); font-size: 18px; }
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 9px 12px; font-size: 13.5px; line-height: 1.4; }
+.kv dt { color: var(--cp-text-soft); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 2px; }
+.kv dd { margin: 0; }
+.big-tool { padding: 16px 18px; }
+.big-tool .tname { font-size: 17px; }
+.big-tool p { font-size: 14px; margin-top: 6px; }
+.big-tool .facts { margin-top: 10px; }
+.big-tool .chip { font-size: 12px; }
+
 /* eval slide */
 table.tiers { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 table.tiers th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cp-text-soft); padding: 0 6px 4px; border-bottom: 1px solid var(--cp-border); }
@@ -269,62 +285,60 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
     <div>
       <div class="kicker">MCP server 1 &middot; DAX over the Power BI semantic model</div>
       <h2>Semantic Model MCP</h2>
-      <p class="lede">Exposes the model's business logic (measures, relationships) so the agent writes DAX that reuses approved calculations.</p>
+      <p class="lede">Hands the agent the model's measures and relationships, so it writes DAX on top of approved calculations.</p>
     </div>
     <code class="path">servers/powerbi-semantic-model-mcp</code>
   </div>
 
-  <div class="grid" style="grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); flex:1">
-    <div class="stack">
-      <div class="sec-title">MCP tools (fabric_rest backend)</div>
-      <div class="card tool">
-        <div class="tool-hd"><code class="tname">get_semantic_model_schema</code><span class="chip accent">agent tool</span></div>
-        <code class="sig">(model_id: uuid, detail: "compact" | "full" = "compact")</code>
-        <p>Returns what the agent needs to write DAX: tables and typed columns, every measure with its exact DAX name and expression, and relationships, with inactive ones flagged for <code class="inl">USERELATIONSHIP</code>.</p>
-        <ul class="facts"><li class="chip">compact: plain text, ~29K chars</li><li class="chip">full: whole catalog JSON, ~80K tokens, for audits</li></ul>
+  <div class="grid" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px">
+    <div class="stack" style="gap:14px">
+      <div class="sec-title">Tools the agent uses</div>
+      <div class="card big-tool">
+        <code class="tname">get_semantic_model_schema</code>
+        <p>Tables, columns, every measure with its exact DAX name, and relationships.</p>
+        <ul class="facts"><li class="chip accent">compact text (default)</li><li class="chip">full JSON for audits</li></ul>
       </div>
-      <div class="card tool">
-        <div class="tool-hd"><code class="tname">execute_dax_query</code><span class="chip accent">agent tool</span></div>
-        <code class="sig">(model_id: uuid, dax_query: string &le; 20,000 chars)</code>
-        <p>Runs one read-only DAX query (must contain <code class="inl">EVALUATE</code>) through Power BI <code class="inl">executeDaxQueries</code> and returns the result tables as JSON rows, decoded from Arrow.</p>
-        <ul class="facts"><li class="chip">&le; 1,000 rows</li><li class="chip">60 s timeout</li><li class="chip">8 MB response cap</li><li class="chip">errors in a 200 response are detected</li></ul>
+      <div class="card big-tool">
+        <code class="tname">execute_dax_query</code>
+        <p>Runs one read-only DAX query and returns the rows.</p>
+        <ul class="facts"><li class="chip accent">EVALUATE required</li><li class="chip">&le; 1,000 rows</li><li class="chip">60 s</li></ul>
       </div>
-      <div class="card tool">
-        <div class="tool-hd"><code class="tname">get_report_metadata</code><span class="chip">not given to agents</span></div>
-        <code class="sig">(report_id: uuid)</code>
-        <p>Confirms the allowlisted report still exists and is still bound to the configured model.</p>
-      </div>
-      <p class="small"><code class="inl">execute_dax_query_as_user</code> is off by default: an operator-only probe that sets <code class="inl">effectiveUsername</code> from a server-side allowlist. All tools are read-only and share one backend identity; there is no per-caller RLS.</p>
+      <p class="small">Also on the server, not given to agents: <code class="inl">get_report_metadata</code> and an operator-only probe, <code class="inl">execute_dax_query_as_user</code>, which is off by default.</p>
     </div>
 
-    <div class="stack">
-      <div class="sec-title">Where the schema is defined</div>
-      <div class="card">
-        <div class="flow">
-          <div class="step"><span class="n">1</span><span>PBIX read offline by <code>inspect_pbix.py</code> into <code>model-metadata.json</code></span></div>
-          <div class="step"><span class="n">2</span><span>Overlay adds descriptions and synonyms: <code>semantic-overlay.yaml</code></span></div>
-          <div class="step"><span class="n">3</span><span><code>wealth_management_mcp export</code> writes the catalog <code>artifacts/wealth-management-catalog-mcaps.json</code>, shipped in the deployment zip</span></div>
-          <div class="step"><span class="n">4</span><span>Server validates the catalog at startup and serves a compact text view</span></div>
-        </div>
+    <div class="stack" style="gap:14px">
+      <div class="sec-title">Where the schema comes from</div>
+      <div class="hflow">
+        <div class="node"><b>PBIX</b><span>read offline</span></div>
+        <div class="to">&rarr;</div>
+        <div class="node focus"><b>Catalog JSON</b><span>+ YAML overlay</span></div>
+        <div class="to">&rarr;</div>
+        <div class="node"><b>Compact text</b><span>what the agent reads</span></div>
       </div>
       <div class="card">
-        <p style="font-size:13px;line-height:1.45"><b>Format:</b> JSON, validated against <b>OSSIE-derived Fabric/DAX Profile 1.0.0</b> (JSON Schema draft 2020-12): the pinned Apache Ossie core spec <code class="inl">schemas/ossie-schema.json</code> plus closed Power BI extensions in <code class="inl">schemas/__init__.py</code>.</p>
-        <p class="small" style="margin-top:4px">ID <code class="inl">urn:wealth-management-mcp:schema:ossie-fabric-dax:1.0.0</code> &middot; 15 tables &middot; 171 columns &middot; 54 measures &middot; 37 relationships (25 active)</p>
+        <dl class="kv" style="margin:0">
+          <dt>File</dt><dd><code class="inl">artifacts/wealth-management-catalog-mcaps.json</code></dd>
+          <dt>Format</dt><dd>JSON that follows the <b>OSSIE-derived Fabric/DAX Profile 1.0.0</b>, a JSON Schema (draft 2020-12)</dd>
+          <dt>Schema</dt><dd><code class="inl">src/wealth_management_mcp/schemas/</code></dd>
+          <dt>Contents</dt><dd>15 tables &middot; 171 columns &middot; 54 measures &middot; 37 relationships</dd>
+        </dl>
       </div>
-      <pre class="snippet"><span class="c">// compact view returned to the agent (excerpt)</span>
-<span class="k">TABLES</span>        dim_account: account_id:String, account_key:Integer, ...
-<span class="k">MEASURES</span>      [Total Clients] (dim_client) = COUNTROWS(dim_client)
-<span class="k">RELATIONSHIPS</span> 'fact_aum_daily'[client_key] -&gt; 'dim_client'[client_key] [INACTIVE]</pre>
     </div>
   </div>
 
-  <div class="strip">
-    <div class="cell"><b>Transport</b>Streamable HTTP at <code>/mcp</code>, Python 3.11 MCP SDK</div>
-    <div class="cell"><b>Hosting and auth</b>Azure App Service; managed identity to Power BI <code>executeDaxQueries</code></div>
-    <div class="cell"><b>Resources</b>Status, profile schema and model catalog under <code>wealth://</code></div>
-    <div class="cell"><b>Startup guard</b>Catalog binding must match the configured workspace, model and report IDs</div>
+  <div style="margin-top:22px">
+    <div class="sec-title">What the agent reads (compact view, excerpt)</div>
+    <pre class="snippet" style="font-size:12.5px;padding:10px 14px"><span class="k">TABLES</span>         dim_account: account_id:String, account_key:Integer, account_type:String, ...
+<span class="k">MEASURES</span>       [Total Clients] (dim_client) = COUNTROWS(dim_client)
+<span class="k">RELATIONSHIPS</span>  'fact_aum_daily'[client_key] -&gt; 'dim_client'[client_key] [INACTIVE]</pre>
   </div>
-  <div class="ft"><span>Semantic Model MCP</span><div class="nav"></div></div>
+
+  <div class="strip" style="margin-top:auto">
+    <div class="cell"><b>Runs on</b>Azure App Service, streamable HTTP at <code>/mcp</code></div>
+    <div class="cell"><b>Data access</b>Managed identity to Power BI <code>executeDaxQueries</code></div>
+    <div class="cell"><b>Safety</b>Read-only; one shared identity, no per-caller RLS</div>
+  </div>
+  <div class="ft" style="margin-top:0"><span>Semantic Model MCP</span><div class="nav"></div></div>
 </section>
 
 <!-- 3. OneLake SQL MCP -->
