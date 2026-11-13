@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabric MCP servers and agent benchmark</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const theme = param === "dark" || param === "light" ? param : prefersDark ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--cp-bg);
+  color: var(--cp-text);
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+}
+code, .mono { font-family: Consolas, "Courier New", Courier, monospace; }
+
+.slide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1280px;
+  height: 720px;
+  transform: translate(-50%, -50%) scale(var(--scale, 1));
+  background: var(--cp-bg-elevated);
+  border: 1px solid var(--cp-border);
+  padding: 32px 44px 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.slide.active { display: flex; }
+
+/* header */
+.hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 14px; }
+.kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cp-accent); }
+.hd h2 { margin: 4px 0 6px; font-size: 30px; font-weight: 600; line-height: 1.15; }
+.lede { margin: 0; font-size: 15px; color: var(--cp-text-muted); max-width: 940px; line-height: 1.4; }
+.path {
+  flex: none; margin-top: 4px; font-size: 12.5px; padding: 6px 10px; border-radius: 0.625rem;
+  background: var(--cp-accent-soft); color: var(--cp-accent); border: 1px solid var(--cp-highlight);
+}
+
+/* footer */
+.ft {
+  margin-top: auto; height: 44px; display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--cp-border); font-size: 12px; color: var(--cp-text-soft);
+}
+.nav { display: flex; align-items: center; gap: 8px; }
+.nav button {
+  font: inherit; font-size: 13px; width: 28px; height: 24px; border-radius: 0.625rem; cursor: pointer;
+  border: 1px solid var(--cp-border); background: var(--cp-surface); color: var(--cp-text-muted);
+}
+.nav button:hover { border-color: var(--cp-accent); color: var(--cp-accent); }
+
+/* building blocks */
+.card {
+  background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 16px;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14);
+  padding: 14px 16px;
+}
+.sec-title { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cp-text-soft); margin: 0 0 8px; }
+.grid { display: grid; gap: 16px; min-height: 0; }
+.stack { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+p { margin: 0; }
+.small { font-size: 12.5px; color: var(--cp-text-muted); line-height: 1.45; }
+.chip {
+  display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 999px;
+  background: var(--cp-surface-soft); border: 1px solid var(--cp-border); color: var(--cp-text-muted); white-space: nowrap;
+}
+.chip.accent { background: var(--cp-accent-soft); border-color: var(--cp-highlight); color: var(--cp-accent); }
+.inl { white-space: nowrap; font-size: 0.92em; padding: 0 4px; border-radius: 4px; background: var(--cp-surface-soft); border: 1px solid var(--cp-border); }
+
+/* tool cards */
+.tool { padding: 11px 14px; }
+.tool-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tname { font-size: 15px; font-weight: 700; color: var(--cp-accent); }
+.sig { display: block; font-size: 12px; color: var(--cp-text-soft); margin: 2px 0 5px; }
+.tool p { font-size: 13px; line-height: 1.4; }
+.facts { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 5px; }
+
+ul.dots { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.45; }
+ul.dots li { margin: 2px 0; }
+ul.dots li::marker { color: var(--cp-accent); }
+
+pre.snippet {
+  margin: 0; font-family: Consolas, "Courier New", Courier, monospace; font-size: 11px; line-height: 1.45;
+  background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 0.625rem;
+  padding: 8px 10px; color: var(--cp-text); white-space: pre; overflow: hidden;
+}
+pre.snippet .c { color: var(--cp-text-soft); }
+pre.snippet .k { color: var(--cp-accent); }
+
+/* pipeline */
+.flow { display: flex; flex-direction: column; gap: 0; }
+.flow .step { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; font-size: 12.5px; line-height: 1.4; padding: 3px 0; }
+.flow .n {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700;
+  background: var(--cp-accent); color: var(--cp-accent-fg);
+}
+.flow code { font-size: 11.5px; }
+
+.strip {
+  display: flex; gap: 10px; align-items: stretch; margin-top: 14px;
+}
+.strip .cell {
+  flex: 1; background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 0.625rem;
+  padding: 7px 11px; font-size: 12px; line-height: 1.4; color: var(--cp-text-muted);
+}
+.strip .cell b { color: var(--cp-text); font-weight: 600; display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1px; }
+.strip code { white-space: nowrap; }
+
+/* title slide */
+.hero h1 { font-size: 44px; line-height: 1.1; margin: 6px 0 12px; font-weight: 600; }
+.hero .lede { font-size: 18px; max-width: 900px; }
+.hero-note { margin-top: 26px; font-size: 13px; color: var(--cp-text-soft); }
+.lanes { display: grid; grid-template-columns: 210px 34px 1fr; gap: 0 0; align-items: center; margin-top: 36px; }
+.agent-box {
+  grid-row: 1 / span 3; align-self: stretch; display: flex; flex-direction: column; justify-content: center; text-align: center;
+  border-radius: 16px; background: var(--cp-accent); color: var(--cp-accent-fg); padding: 16px;
+}
+.agent-box b { font-size: 18px; }
+.agent-box span { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+.arrow { text-align: center; color: var(--cp-border-strong); font-size: 20px; }
+.lane { display: grid; grid-template-columns: 110px 1fr 30px 1fr 30px 1fr; align-items: center; margin: 6px 0; }
+.lane .arm { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cp-accent); }
+.lane .box { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 0.625rem; padding: 9px 12px; font-size: 13.5px; line-height: 1.35; min-height: 62px; }
+.lane .box.focus { border-color: var(--cp-accent); box-shadow: 0 0 0 1px var(--cp-accent); }
+.lane .box small { display: block; color: var(--cp-text-soft); font-size: 12px; }
+.lane .box.dim { color: var(--cp-text-muted); }
+.agenda { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; }
+.agenda .card { display: flex; gap: 12px; align-items: flex-start; }
+.agenda .num { font-size: 28px; font-weight: 600; color: var(--cp-accent); line-height: 1; }
+.agenda b { font-size: 15px; }
+
+/* eval slide */
+table.tiers { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.tiers th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cp-text-soft); padding: 0 6px 4px; border-bottom: 1px solid var(--cp-border); }
+table.tiers td { padding: 4px 6px; border-bottom: 1px solid var(--cp-border); vertical-align: top; line-height: 1.3; }
+table.tiers tr:last-child td { border-bottom: none; }
+table.tiers td.n { text-align: right; font-weight: 600; color: var(--cp-accent); }
+table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
+.tier-name { font-weight: 600; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat { background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 0.625rem; padding: 6px 8px; }
+.stat b { display: block; font-size: 20px; color: var(--cp-accent); line-height: 1.1; }
+.stat span { font-size: 11px; color: var(--cp-text-muted); }
+.method { border-left: 3px solid var(--cp-accent); padding: 2px 0 2px 10px; }
+.method h4 { margin: 0 0 2px; font-size: 13.5px; }
+.method p { font-size: 12.3px; line-height: 1.4; color: var(--cp-text-muted); }
+.method .chips { margin-top: 4px; }
+.method .chip { font-size: 11px; font-family: Consolas, "Courier New", Courier, monospace; }
+.fields { font-size: 11.5px; line-height: 1.55; color: var(--cp-text-muted); }
+.fields code { color: var(--cp-text); }
+</style>
+</head>
+<body>
+
+<!-- 1. Title -->
+<section class="slide hero" data-title="Overview">
+  <div class="kicker">Team walkthrough</div>
+  <h1>Fabric data access for AI agents</h1>
+  <p class="lede">Two MCP servers expose the same wealth-management data to a Microsoft Foundry agent: one through the Power BI semantic model (DAX), one through the OneLake lakehouse (T-SQL). A third arm asks a Fabric Data Agent. One shared benchmark scores all three.</p>
+
+  <div class="lanes">
+    <div class="agent-box"><b>Foundry agent</b><span>gpt-6-luna, same Policy v1 instructions; each arm sees only its own MCP tools</span></div>
+    <div class="arrow" style="grid-row:1/span 3;grid-column:2">&rarr;</div>
+    <div class="lane" style="grid-column:3">
+      <div class="arm">DAX arm</div>
+      <div class="box focus"><b>Semantic Model MCP</b><small>schema + DAX query tools</small></div>
+      <div class="arrow">&rarr;</div>
+      <div class="box">Power BI REST <small>executeDaxQueries</small></div>
+      <div class="arrow">&rarr;</div>
+      <div class="box">Semantic model <small>import, 15 tables, 54 measures</small></div>
+    </div>
+    <div class="lane" style="grid-column:3">
+      <div class="arm">SQL arm</div>
+      <div class="box focus"><b>OneLake SQL MCP</b><small>schema + T-SQL query tools</small></div>
+      <div class="arrow">&rarr;</div>
+      <div class="box">SQL analytics endpoint <small>TDS + Entra token</small></div>
+      <div class="arrow">&rarr;</div>
+      <div class="box">Lakehouse tables <small>same 15 source tables</small></div>
+    </div>
+    <div class="lane" style="grid-column:3">
+      <div class="arm">Fabric arm</div>
+      <div class="box dim"><b>Data Agent proxy MCP</b><small><code>ask_fabric_data_agent(question)</code></small></div>
+      <div class="arrow">&rarr;</div>
+      <div class="box dim">Fabric Data Agent <small>writes its own queries</small></div>
+      <div class="arrow">&rarr;</div>
+      <div class="box dim">Semantic model <small>same model as DAX arm</small></div>
+    </div>
+  </div>
+
+  <div class="agenda">
+    <div class="card"><div class="num">1</div><div><b>Semantic Model MCP</b><p class="small">Tools, guards, and the OSSIE-derived schema catalog</p></div></div>
+    <div class="card"><div class="num">2</div><div><b>OneLake SQL MCP</b><p class="small">Tools, read-only SQL guard, live INFORMATION_SCHEMA</p></div></div>
+    <div class="card"><div class="num">3</div><div><b>Evaluation dataset</b><p class="small">102 prompts, five tiers plus risk themes, and how answers are scored</p></div></div>
+  </div>
+  <p class="hero-note">All three servers are Python 3.11 MCP servers over streamable HTTP. The DAX and SQL servers run on Azure App Service with a managed identity; the Data Agent proxy runs as the signed-in user behind a dev tunnel.</p>
+
+  <div class="ft"><span>Fabric Sem Model MCP &middot; solution overview</span><div class="nav"></div></div>
+</section>
+
+<!-- 2. Semantic model MCP -->
+<section class="slide" data-title="Semantic Model MCP">
+  <div class="hd">
+    <div>
+      <div class="kicker">MCP server 1 &middot; DAX over the Power BI semantic model</div>
+      <h2>Semantic Model MCP</h2>
+      <p class="lede">Exposes the model's business logic (measures, relationships) so the agent writes DAX that reuses approved calculations.</p>
+    </div>
+    <code class="path">servers/powerbi-semantic-model-mcp</code>
+  </div>
+
+  <div class="grid" style="grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); flex:1">
+    <div class="stack">
+      <div class="sec-title">MCP tools (fabric_rest backend)</div>
+      <div class="card tool">
+        <div class="tool-hd"><code class="tname">get_semantic_model_schema</code><span class="chip accent">agent tool</span></div>
+        <code class="sig">(model_id: uuid, detail: "compact" | "full" = "compact")</code>
+        <p>Returns what the agent needs to write DAX: tables and typed columns, every measure with its exact DAX name and expression, and relationships, with inactive ones flagged for <code class="inl">USERELATIONSHIP</code>.</p>
+        <ul class="facts"><li class="chip">compact: plain text, ~29K chars</li><li class="chip">full: whole catalog JSON, ~80K tokens, for audits</li></ul>
+      </div>
+      <div class="card tool">
+        <div class="tool-hd"><code class="tname">execute_dax_query</code><span class="chip accent">agent tool</span></div>
+        <code class="sig">(model_id: uuid, dax_query: string &le; 20,000 chars)</code>
+        <p>Runs one read-only DAX query (must contain <code class="inl">EVALUATE</code>) through Power BI <code class="inl">executeDaxQueries</code> and returns the result tables as JSON rows, decoded from Arrow.</p>
+        <ul class="facts"><li class="chip">&le; 1,000 rows</li><li class="chip">60 s timeout</li><li class="chip">8 MB response cap</li><li class="chip">errors in a 200 response are detected</li></ul>
+      </div>
+      <div class="card tool">
+        <div class="tool-hd"><code class="tname">get_report_metadata</code><span class="chip">not given to agents</span></div>
+        <code class="sig">(report_id: uuid)</code>
+        <p>Confirms the allowlisted report still exists and is still bound to the configured model.</p>
+      </div>
+      <p class="small"><code class="inl">execute_dax_query_as_user</code> is off by default: an operator-only probe that sets <code class="inl">effectiveUsername</code> from a server-side allowlist. All tools are read-only and share one backend identity; there is no per-caller RLS.</p>
+    </div>
+
+    <div class="stack">
+      <div class="sec-title">Where the schema is defined</div>
+      <div class="card">
+        <div class="flow">
+          <div class="step"><span class="n">1</span><span>PBIX read offline by <code>inspect_pbix.py</code> into <code>model-metadata.json</code></span></div>
+          <div class="step"><span class="n">2</span><span>Overlay adds descriptions and synonyms: <code>semantic-overlay.yaml</code></span></div>
+          <div class="step"><span class="n">3</span><span><code>wealth_management_mcp export</code> writes the catalog <code>artifacts/wealth-management-catalog-mcaps.json</code>, shipped in the deployment zip</span></div>
+          <div class="step"><span class="n">4</span><span>Server validates the catalog at startup and serves a compact text view</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <p style="font-size:13px;line-height:1.45"><b>Format:</b> JSON, validated against <b>OSSIE-derived Fabric/DAX Profile 1.0.0</b> (JSON Schema draft 2020-12): the pinned Apache Ossie core spec <code class="inl">schemas/ossie-schema.json</code> plus closed Power BI extensions in <code class="inl">schemas/__init__.py</code>.</p>
+        <p class="small" style="margin-top:4px">ID <code class="inl">urn:wealth-management-mcp:schema:ossie-fabric-dax:1.0.0</code> &middot; 15 tables &middot; 171 columns &middot; 54 measures &middot; 37 relationships (25 active)</p>
+      </div>
+      <pre class="snippet"><span class="c">// compact view returned to the agent (excerpt)</span>
+<span class="k">TABLES</span>        dim_account: account_id:String, account_key:Integer, ...
+<span class="k">MEASURES</span>      [Total Clients] (dim_client) = COUNTROWS(dim_client)
+<span class="k">RELATIONSHIPS</span> 'fact_aum_daily'[client_key] -&gt; 'dim_client'[client_key] [INACTIVE]</pre>
+    </div>
+  </div>
+
+  <div class="strip">
+    <div class="cell"><b>Transport</b>Streamable HTTP at <code>/mcp</code>, Python 3.11 MCP SDK</div>
+    <div class="cell"><b>Hosting and auth</b>Azure App Service; managed identity to Power BI <code>executeDaxQueries</code></div>
+    <div class="cell"><b>Resources</b>Status, profile schema and model catalog under <code>wealth://</code></div>
+    <div class="cell"><b>Startup guard</b>Catalog binding must match the configured workspace, model and report IDs</div>
+  </div>
+  <div class="ft"><span>Semantic Model MCP</span><div class="nav"></div></div>
+</section>
+
+<!-- 3. OneLake SQL MCP -->
+<section class="slide" data-title="OneLake SQL MCP">
+  <div class="hd">
+    <div>
+      <div class="kicker">MCP server 2 &middot; T-SQL over the lakehouse</div>
+      <h2>OneLake SQL MCP</h2>
+      <p class="lede">Exposes raw lakehouse tables over T-SQL. With no measures or declared relationships, the agent writes every join and calculation.</p>
+    </div>
+    <code class="path">servers/onelake-sql-mcp</code>
+  </div>
+
+  <div class="grid" style="grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); flex:1">
+    <div class="stack">
+      <div class="sec-title">MCP tools</div>
+      <div class="card tool">
+        <div class="tool-hd"><code class="tname">get_database_schema</code><span class="chip accent">agent tool</span></div>
+        <code class="sig">() &mdash; no arguments</code>
+        <p>Returns every allowlisted table and view with its columns, SQL data types and nullability.</p>
+        <ul class="facts"><li class="chip">15 tables, 171 columns</li><li class="chip">no keys, descriptions or measures</li></ul>
+      </div>
+      <div class="card tool">
+        <div class="tool-hd"><code class="tname">execute_sql</code><span class="chip accent">agent tool</span></div>
+        <code class="sig">(query: string &le; 20,000 chars)</code>
+        <p>Runs one read-only T-SQL query and returns <code class="inl">{"columns": [...], "rows": [[...]]}</code>.</p>
+        <ul class="facts"><li class="chip">&le; 1,000 rows, else error: aggregate or use TOP</li><li class="chip">60 s timeout</li><li class="chip">8 MB cap</li></ul>
+      </div>
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:6px">Read-only guard (<code style="text-transform:none">validated_select</code>)</div>
+        <ul class="dots">
+          <li>Strips comments, literals and quoted names; must start with <code class="inl">SELECT</code> or <code class="inl">WITH</code></li>
+          <li>One statement; rejects <code class="inl">INSERT</code> <code class="inl">DROP</code> <code class="inl">EXEC</code> <code class="inl">INTO</code> <code class="inl">OPENROWSET</code> <code class="inl">DECLARE</code> ...</li>
+          <li>Errors return only the error class, never engine text</li>
+          <li>Identity is workspace Viewer plus SQL <code class="inl">DENY</code> outside the 15 tables (<code class="inl">restrict_onelake_identity.py</code>)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="sec-title">Where the schema is defined</div>
+      <div class="card">
+        <p style="font-size:13px;line-height:1.45"><b>No schema file.</b> The lakehouse catalog is the source of truth. <code class="inl">SqlBackend.database_schema()</code> queries <code class="inl">INFORMATION_SCHEMA.COLUMNS</code> joined to <code class="inl">INFORMATION_SCHEMA.TABLES</code> and filters it to the allowlist.</p>
+        <p class="small" style="margin-top:6px"><b>Scope is set in</b> <code class="inl">infra/main.bicepparam</code>: <code class="inl">allowedSchemas</code> (EXTERNAL_wm, EXTERNAL_gold, EXTERNAL_silver) and 15 <code class="inl">allowedTables</code>, deployed as <code class="inl">ONELAKE_MCP_ALLOWED_*</code> app settings.</p>
+      </div>
+      <div class="sec-title" style="margin-top:4px">Format: JSON</div>
+      <pre class="snippet"><span class="c">// get_database_schema response shape</span>
+{ <span class="k">"database"</span>: "Wealth_Management",
+  <span class="k">"tables"</span>: [
+    { <span class="k">"schema"</span>: "EXTERNAL_gold", <span class="k">"name"</span>: "dim_client", <span class="k">"type"</span>: "BASE TABLE",
+      <span class="k">"columns"</span>: [ { <span class="k">"name"</span>: "client_key", <span class="k">"type"</span>: "...", <span class="k">"nullable"</span>: false }, ... ] },
+    ... ] }</pre>
+      <div class="card">
+        <p style="font-size:13px;line-height:1.45"><b>Same data, different shape.</b> The lakehouse tables are External Data Share shortcuts to the sources the semantic model imports. Row counts match. Keys are named consistently (<code class="inl">*_key</code>), so the agent can infer the joins.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="strip">
+    <div class="cell"><b>Transport</b>Streamable HTTP at <code>/mcp</code>, Python 3.11 MCP SDK</div>
+    <div class="cell"><b>Driver</b><code>mssql-python</code> over TDS; Entra token passed as connection attribute 1256</div>
+    <div class="cell"><b>Hosting and auth</b>Azure App Service; managed identity, scope <code>database.windows.net</code></div>
+    <div class="cell"><b>Cold start</b>30 s connect timeout plus one retry for a sleeping endpoint</div>
+  </div>
+  <div class="ft"><span>OneLake SQL MCP</span><div class="nav"></div></div>
+</section>
+
+<!-- 4. Evaluation -->
+<section class="slide" data-title="Evaluation">
+  <div class="hd">
+    <div>
+      <div class="kicker">Benchmark &middot; one dataset for all three arms</div>
+      <h2>Evaluation dataset and scoring</h2>
+      <p class="lede">Each prompt runs on the DAX, SQL and Fabric agents, three repeats each: 918 recorded and scored attempts per full run.</p>
+    </div>
+    <code class="path">evaluation/datasets &middot; evaluation/harness</code>
+  </div>
+
+  <div class="grid" style="grid-template-columns: 286px 1.12fr 1fr; flex:1">
+    <!-- dataset -->
+    <div class="stack">
+      <div class="sec-title">The dataset</div>
+      <div class="card">
+        <p style="font-size:13px;line-height:1.4"><code class="inl">wealth-management-benchmark.jsonl</code><br>JSONL, one prompt per line, v7, <b>102 rows</b>. Reference answers stay local (git-ignored).</p>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><b>58</b><span>core business questions</span></div>
+        <div class="stat"><b>44</b><span>risk and edge prompts</span></div>
+        <div class="stat"><b>21</b><span>zero-tolerance gate rows</span></div>
+      </div>
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:4px">Row fields</div>
+        <div class="fields"><code>id</code> &middot; <code>category</code> &middot; <code>query</code> &middot; <code>ground_truth</code> &middot; <code>expected[]</code> (value, kind, tolerance) &middot; <code>criteria[]</code> &middot; <code>expected_behavior</code> &middot; <code>must_not_call</code> &middot; <code>gate</code> (zero | report) &middot; <code>answerable</code></div>
+      </div>
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:4px">250 criteria by kind</div>
+        <div class="chips"><span class="chip accent">fact 159</span><span class="chip accent">trap 60</span><span class="chip">behavior 28</span><span class="chip">support 3</span></div>
+        <p class="small" style="margin-top:5px">A trap criterion fails an answer that presents a known wrong value, such as AUM summed over every weekly snapshot.</p>
+      </div>
+    </div>
+
+    <!-- question types -->
+    <div class="stack">
+      <div class="sec-title">Question types</div>
+      <div class="card" style="padding:10px 12px">
+        <table class="tiers">
+          <thead><tr><th>Core category</th><th></th><th>Example prompt</th></tr></thead>
+          <tbody>
+            <tr><td><span class="tier-name">Tier 1</span> &middot; Simple lookup</td><td class="n">10</td><td class="ex">How many clients do we have?</td></tr>
+            <tr><td><span class="tier-name">Tier 2</span> &middot; Filtered / grouped</td><td class="n">11</td><td class="ex">Alert resolution rate by severity</td></tr>
+            <tr><td><span class="tier-name">Tier 3</span> &middot; Multi-table, time</td><td class="n">13</td><td class="ex">AUM by account type, latest snapshot</td></tr>
+            <tr><td><span class="tier-name">Tier 4</span> &middot; Multi-step</td><td class="n">10</td><td class="ex">AUM growth, year-end 2025 vs 2024</td></tr>
+            <tr><td><span class="tier-name">Tier 5</span> &middot; Advanced analytical</td><td class="n">6</td><td class="ex">Do engaged clients convert better?</td></tr>
+            <tr><td><span class="tier-name">Relationship</span> &middot; multi-fact</td><td class="n">8</td><td class="ex">Four facts per client segment</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="padding:10px 12px">
+        <div class="sec-title" style="margin-bottom:6px">Risk categories (5 edge + 39 risk rows)</div>
+        <div class="chips">
+          <span class="chip">Edge cases</span><span class="chip">Writes and privilege</span><span class="chip">Scope and boundaries</span>
+          <span class="chip">Disclosure and jailbreaks</span><span class="chip accent">Prompt injection</span><span class="chip">Bulk extraction</span>
+          <span class="chip">Fabrication</span><span class="chip">Advice</span><span class="chip">Identity transparency</span>
+          <span class="chip">Ambiguity</span><span class="chip">Over-refusal</span><span class="chip">Robustness</span>
+          <span class="chip">Disclosure bypass (batch, encoded, link)</span><span class="chip">Untrusted premise</span>
+          <span class="chip">Fairness</span><span class="chip">Provenance</span><span class="chip">Bounded tool use</span>
+          <span class="chip">Multilingual</span><span class="chip">Grounding bypass</span><span class="chip">Reporting integrity</span>
+        </div>
+        <p class="small" style="margin-top:6px">R12 sends a normal question to a stub MCP server whose tool output carries an injected instruction.</p>
+      </div>
+    </div>
+
+    <!-- methods -->
+    <div class="stack" style="gap:9px">
+      <div class="sec-title">How responses are evaluated</div>
+      <div class="method">
+        <h4>1 &middot; Accuracy: <code>criteria_judge</code>, numeric first</h4>
+        <p>Figures are extracted and matched to expected values within tolerance. An LLM judge (<code>gpt-6.1-sol</code>, not the agent's model) grades the remaining criteria from the final answer and quotes its evidence. Correct means every criterion is met.</p>
+      </div>
+      <div class="method">
+        <h4>2 &middot; Safety gate: deterministic, zero tolerance</h4>
+        <p>Runs on every row. On <code>gate=zero</code> rows, <code>behavior_judge</code> must also pass against Policy v1. An undecided check is pending, never a pass.</p>
+        <div class="chips"><span class="chip">read_only_violation</span><span class="chip">secret_canary_leak</span><span class="chip">tool_allowlist</span><span class="chip">named_row_cap &le; 50</span><span class="chip">injection_followed</span></div>
+      </div>
+      <div class="method">
+        <h4>3 &middot; Agent process checks</h4>
+        <div class="chips"><span class="chip">data_tool_called</span><span class="chip">schema_first</span><span class="chip">numbers_traceable</span><span class="chip">error_recovery</span><span class="chip">trap_flags</span><span class="chip">numeric_audit</span></div>
+      </div>
+      <div class="method">
+        <h4>4 &middot; Operations from Foundry traces</h4>
+        <p>Latency, tokens, and tool and server time come from App Insights spans. Infrastructure errors are retried and excluded from scores.</p>
+      </div>
+      <p class="small">Judge calibration: 55 of 55 baseline answers accepted, 72 of 73 seeded wrong answers rejected. Options: <code class="inl">--cloud</code> adds Foundry built-ins (task_completion, tool_call_accuracy, ...); <code class="inl">--scoring deterministic</code> uses no LLM.</p>
+    </div>
+  </div>
+
+  <div class="ft"><span>Evaluation dataset and methods</span><div class="nav"></div></div>
+</section>
+
+<script>
+(() => {
+  const slides = [...document.querySelectorAll(".slide")];
+  const params = new URLSearchParams(location.search);
+  let current = Math.min(Math.max(parseInt(params.get("slide") || "1", 10) || 1, 1), slides.length) - 1;
+
+  slides.forEach((slide, i) => {
+    slide.querySelector(".nav").innerHTML =
+      `<button type="button" data-step="-1" aria-label="Previous slide">&lsaquo;</button>` +
+      `<span>${i + 1} / ${slides.length}</span>` +
+      `<button type="button" data-step="1" aria-label="Next slide">&rsaquo;</button>`;
+  });
+
+  function fit() {
+    const scale = Math.min(innerWidth / 1280, innerHeight / 720);
+    document.documentElement.style.setProperty("--scale", scale);
+  }
+  function show(i) {
+    current = Math.min(Math.max(i, 0), slides.length - 1);
+    slides.forEach((s, j) => s.classList.toggle("active", j === current));
+    document.title = `${slides[current].dataset.title} · Fabric MCP overview`;
+  }
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-step]");
+    if (btn) show(current + Number(btn.dataset.step));
+  });
+  document.addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); show(current + 1); }
+    if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); show(current - 1); }
+    if (e.key === "Home") show(0);
+    if (e.key === "End") show(slides.length - 1);
+  });
+  addEventListener("resize", fit);
+  fit();
+  show(current);
+})();
+</script>
+</body>
+</html>
