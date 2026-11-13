@@ -357,7 +357,7 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
       <div class="hflow">
         <div class="node"><b>Lakehouse</b><span>15 shortcut tables</span></div>
         <div class="to">&rarr;</div>
-        <div class="node focus"><b>INFORMATION_SCHEMA</b><span>read on every call</span></div>
+        <div class="node focus"><b>INFORMATION_SCHEMA</b><span>read once per session</span></div>
         <div class="to">&rarr;</div>
         <div class="node"><b>JSON</b><span>what the agent reads</span></div>
       </div>
@@ -367,6 +367,7 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
           <dt>Format</dt><dd>JSON: tables, each with columns (name, type, nullable)</dd>
           <dt>Scope</dt><dd>Allowlist in <code class="inl">infra/main.bicepparam</code></dd>
           <dt>Contents</dt><dd>15 tables &middot; 171 columns &middot; same data as the model</dd>
+          <dt>When</dt><dd>Once per conversation, or again if needed; not on every request</dd>
         </dl>
       </div>
     </div>
