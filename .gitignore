@@ -1,4 +1,5 @@
 # Local source data and private metadata are not public source artifacts.
+README_LOCAL.md
 *.pbix
 *.pbit
 *.abf

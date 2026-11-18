@@ -79,15 +79,7 @@ The Fabric data agent arm needs the proxy running locally and reachable through 
 - The Python package design (official MCP Python SDK v2, Pydantic, ASGI/Uvicorn, pytest/Ruff/mypy on Python 3.11) and the OSSIE-derived Fabric/DAX semantic profile are described in the [design document](docs/architecture/semantic-model-mcp-implementation-plan.md). The semantic profile is intentionally adapted; it is not unmodified OSSIE or a drop-in replacement for Microsoft's endpoint.
 - Evaluation results are kept out of the repository, under `artifacts/benchmarks/`.
 
-## Local inspection environment
 
-The repository-local virtual environment uses **Python 3.11 x64**, because PBIXRay's native dependencies do not publish Windows ARM64 wheels in the versions inspected. Its base runtime is workspace-local, installed without global executable or registry registration. No global Python packages or other project environments were changed.
-
-The implementation reuses this root environment with locked project dependencies. It pins official MCP SDK **2.1.1** because the configured mirror lacked 2.2.0 and direct wheel downloads failed TLS; certificate verification was not weakened. The environment was not rebuilt and the PBIX remains unchanged.
-
-The inspection utility accepts a source PBIX path and optional output directory. Its default outputs are private, git-ignored metadata under the artifacts directory. It does not query Power BI, decode business table rows, refresh, or modify the PBIX. Reuse the explicit repository-local virtual-environment interpreter when rerunning it.
-
-The source PBIX, extracted artifacts, virtual environment, downloaded runtime, and secret configuration are excluded by [.gitignore](.gitignore). Review descriptions and metadata before sharing this repository; even structural metadata can reveal business context.
 
 ## Licence
 
