@@ -172,7 +172,7 @@ pre.snippet .k { color: var(--cp-accent); }
 .lane .box.focus { border-color: var(--cp-accent); box-shadow: 0 0 0 1px var(--cp-accent); }
 .lane .box small { display: block; color: var(--cp-text-soft); font-size: 12px; }
 .lane .box.dim { color: var(--cp-text-muted); }
-.agenda { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 36px; }
+.agenda { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 36px; }
 .agenda .card { display: flex; gap: 12px; align-items: flex-start; }
 .agenda .num { font-size: 28px; font-weight: 600; color: var(--cp-accent); line-height: 1; }
 .agenda b { font-size: 15px; }
@@ -211,6 +211,32 @@ table.tiers td.n { text-align: right; font-weight: 600; color: var(--cp-accent);
 table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
 .tier-name { font-weight: 600; white-space: nowrap; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* results slide */
+.arms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+.arm-card { padding: 12px 16px; display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; align-items: center; }
+.arm-card .who { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.arm-card .big { font-size: 40px; font-weight: 600; line-height: 1; color: var(--cp-accent); }
+.arm-card .big small { display: block; font-size: 11.5px; font-weight: 400; color: var(--cp-text-soft); margin-top: 4px; }
+.arm-card dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 1px 10px; font-size: 12.5px; }
+.arm-card dt { color: var(--cp-text-soft); }
+.arm-card dd { margin: 0; font-weight: 600; text-align: right; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.s1 { background: var(--cp-accent); }
+.s2 { background: var(--cp-warning); }
+.s3 { background: var(--cp-text-soft); }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--cp-text-muted); margin-bottom: 4px; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.brow { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--cp-border); }
+.brow:last-child { border-bottom: none; }
+.brow .bl { font-size: 12.5px; font-weight: 600; }
+.bset { display: flex; flex-direction: column; gap: 2px; padding-right: 40px; }
+.bar { position: relative; height: 8px; border-radius: 3px; width: calc(var(--v) * 1%); }
+.bar em { position: absolute; left: calc(100% + 6px); top: -3px; font-size: 10.5px; line-height: 1; font-style: normal; color: var(--cp-text-muted); }
+ul.take { margin: 0; padding-left: 16px; font-size: 14px; line-height: 1.45; }
+ul.take li { margin: 0 0 10px; }
+ul.take li::marker { color: var(--cp-accent); }
+ul.take b { font-weight: 600; }
 
 /* eval run slide */
 .pipe { display: grid; grid-template-columns: 1fr 18px 1fr 18px 1fr 18px 1fr 18px 1fr; align-items: stretch; margin-bottom: 18px; }
@@ -284,6 +310,7 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
     <div class="card"><div class="num">2</div><div><b>OneLake SQL MCP</b><p class="small">Tools, read-only SQL guard, live INFORMATION_SCHEMA</p></div></div>
     <div class="card"><div class="num">3</div><div><b>Evaluation dataset</b><p class="small">102 prompts, five tiers plus risk themes, and how answers are scored</p></div></div>
     <div class="card"><div class="num">4</div><div><b>Evaluation run</b><p class="small">How one question becomes a recorded, scored answer</p></div></div>
+    <div class="card"><div class="num">5</div><div><b>Run 4 results</b><p class="small">Accuracy, safety, speed and cost per agent</p></div></div>
   </div>
   <p class="hero-note">All three servers are Python 3.11 MCP servers over streamable HTTP. The DAX and SQL servers run on Azure App Service with a managed identity; the Data Agent proxy runs as the signed-in user behind a dev tunnel.</p>
 
@@ -574,6 +601,70 @@ table.tiers td.ex { color: var(--cp-text-muted); font-style: italic; }
     <div class="cell"><b>Output</b>Scorecard and HTML report per batch</div>
   </div>
   <div class="ft" style="margin-top:0"><span>Evaluation run</span><div class="nav"></div></div>
+</section>
+
+<!-- 6. Run 4 results -->
+<section class="slide" data-title="Run 4 results">
+  <div class="hd">
+    <div>
+      <div class="kicker">Benchmark &middot; full run 4 &middot; 2026-11-05</div>
+      <h2>Run 4 results</h2>
+      <p class="lede">All 102 prompts, three repeats, three agents. Correct means every criterion was met.</p>
+    </div>
+    <code class="path">artifacts/benchmarks/2026-11-05-full-4-three-agents-model-v2</code>
+  </div>
+
+  <div class="arms">
+    <div class="card arm-card">
+      <div class="who"><i class="sw s1"></i>DAX &middot; Semantic Model MCP</div>
+      <div class="big">86%<small>260 of 303 correct</small></div>
+      <dl><dt>Core / risk</dt><dd>86% / 86%</dd><dt>Every repeat right</dt><dd>76%</dd><dt>Median time</dt><dd>8.4 s</dd><dt>Tokens per answer</dt><dd>7.7K</dd><dt>Tokens, whole run</dt><dd>2.16M</dd></dl>
+    </div>
+    <div class="card arm-card">
+      <div class="who"><i class="sw s2"></i>SQL &middot; OneLake SQL MCP</div>
+      <div class="big">89%<small>271 of 303 correct</small></div>
+      <dl><dt>Core / risk</dt><dd>87% / 93%</dd><dt>Every repeat right</dt><dd>83%</dd><dt>Median time</dt><dd>6.9 s</dd><dt>Tokens per answer</dt><dd>4.2K</dd><dt>Tokens, whole run</dt><dd>1.23M</dd></dl>
+    </div>
+    <div class="card arm-card">
+      <div class="who"><i class="sw s3"></i>Fabric &middot; Data Agent proxy</div>
+      <div class="big">84%<small>256 of 303 correct</small></div>
+      <dl><dt>Core / risk</dt><dd>85% / 84%</dd><dt>Every repeat right</dt><dd>77%</dd><dt>Median time</dt><dd>33.1 s</dd><dt>Tokens per answer</dt><dd>1.2K*</dd><dt>Tokens, whole run</dt><dd>0.37M*</dd></dl>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px">
+    <div class="stack" style="gap:6px">
+      <div class="sec-title">Core accuracy by tier</div>
+      <div class="legend"><span><i class="sw s1"></i>DAX</span><span><i class="sw s2"></i>SQL</span><span><i class="sw s3"></i>Fabric</span></div>
+      <div>
+        <div class="brow"><span class="bl">Tier 1</span><div class="bset"><div class="bar s1" style="--v:97"><em>97%</em></div><div class="bar s2" style="--v:100"><em>100%</em></div><div class="bar s3" style="--v:93"><em>93%</em></div></div></div>
+        <div class="brow"><span class="bl">Tier 2</span><div class="bset"><div class="bar s1" style="--v:91"><em>91%</em></div><div class="bar s2" style="--v:91"><em>91%</em></div><div class="bar s3" style="--v:88"><em>88%</em></div></div></div>
+        <div class="brow"><span class="bl">Tier 3</span><div class="bset"><div class="bar s1" style="--v:87"><em>87%</em></div><div class="bar s2" style="--v:90"><em>90%</em></div><div class="bar s3" style="--v:87"><em>87%</em></div></div></div>
+        <div class="brow"><span class="bl">Tier 4</span><div class="bset"><div class="bar s1" style="--v:83"><em>83%</em></div><div class="bar s2" style="--v:77"><em>77%</em></div><div class="bar s3" style="--v:83"><em>83%</em></div></div></div>
+        <div class="brow"><span class="bl">Tier 5</span><div class="bset"><div class="bar s1" style="--v:72"><em>72%</em></div><div class="bar s2" style="--v:61"><em>61%</em></div><div class="bar s3" style="--v:44"><em>44%</em></div></div></div>
+        <div class="brow"><span class="bl">Relationship</span><div class="bset"><div class="bar s1" style="--v:75"><em>75%</em></div><div class="bar s2" style="--v:92"><em>92%</em></div><div class="bar s3" style="--v:100"><em>100%</em></div></div></div>
+      </div>
+    </div>
+
+    <div class="stack" style="gap:8px">
+      <div class="sec-title">Takeaways</div>
+      <ul class="take">
+        <li><b>Close overall.</b> The agents are within 5 points. No gap is clearly beyond chance; SQL vs Fabric is borderline (95% interval 0 to +10).</li>
+        <li><b>SQL</b> is fastest and best or tied on Tiers 1&ndash;3. <b>DAX</b> leads on the multi-step Tiers 4&ndash;5.</li>
+        <li><b>Fabric</b> uses the fewest agent tokens but is 4&ndash;5&times; slower, and scores lowest on Tier 5.</li>
+        <li><b>Safety:</b> no write, secret, tool or injection failures on any arm. Gate failures (DAX 8, Fabric 8, SQL 0) were mostly bulk client lists and identity transparency.</li>
+        <li><b>Never right on any arm:</b> Q20, Q33, Q50, R38. These are candidates for a criteria review.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="strip" style="margin-top:auto">
+    <div class="cell"><b>Setup</b>Model v2, dataset v7; agents gpt-6-luna, judge gpt-6.1-sol</div>
+    <div class="cell"><b>Infra</b>Fabric capacity throttled; 195 attempts retried, not scored</div>
+    <div class="cell"><b>Platform</b>Content filter blocked E04, R07, R09 on every arm</div>
+    <div class="cell"><b>* Tokens</b>Agent input + output; Fabric excludes the Data Agent's own use</div>
+  </div>
+  <div class="ft" style="margin-top:0"><span>Run 4 results</span><div class="nav"></div></div>
 </section>
 
 <script>
